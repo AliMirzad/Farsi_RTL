@@ -552,12 +552,22 @@
   function positionAtSelection(rect, targetEl) {
     ensureFlipBtn();
     const btnW = 34, btnH = 34;
-    // Center BELOW the selection (ChatGPT's own popup lands above, so
-    // putting ours below prevents overlap).
-    let top = rect.bottom + 6;
-    if (top + btnH > window.innerHeight - 4) top = rect.top - btnH - 6;
-    let left = rect.left + rect.width / 2 - btnW / 2;
-    left = Math.max(4, Math.min(window.innerWidth - btnW - 4, left));
+    const pRect = targetEl.getBoundingClientRect();
+    // Horizontal: just outside the paragraph's right edge. This is
+    //   - never on top of the text
+    //   - never colliding with ChatGPT's own selection popup (that lands
+    //     centered above the selection)
+    //   - the "start" side for Persian readers, so the button lands where
+    //     the eye naturally scans first
+    // If the paragraph reaches the viewport's right edge, tuck the button
+    // just inside instead.
+    let left = pRect.right + 8;
+    if (left + btnW > window.innerWidth - 4) {
+      left = window.innerWidth - btnW - 4;
+    }
+    // Vertical: aligned with the selection's own vertical center.
+    let top = rect.top + rect.height / 2 - btnH / 2;
+    top = Math.max(4, Math.min(window.innerHeight - btnH - 4, top));
     flipBtn.style.setProperty("top", top + "px", "important");
     flipBtn.style.setProperty("left", left + "px", "important");
     flipBtn.classList.add("on");
