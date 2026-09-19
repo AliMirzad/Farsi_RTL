@@ -4,7 +4,7 @@ const KEY_OLD_RTL = "rtlEnabled"; // legacy boolean, migrated on load
 
 const MODE_DESC = {
   always: "هر پاراگرافی که فارسی داشته باشه راست‌چین می‌شه",
-  smart: "تشخیص هوشمند با مدل CLD3 گوگل + شمارش کلمه",
+  smart: "زبانِ خودِ جمله تعیین می‌کند؛ کد داخل بک‌تیک و لینک شمرده نمی‌شود",
   auto: "بدون تغییر جهت — فقط bidi و فونت اعمال می‌شن"
 };
 
