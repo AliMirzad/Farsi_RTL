@@ -216,34 +216,59 @@
   function detectDirection(text, strict) {
     if (!text) return null;
     let p = 0, l = 0;
-    let wordClassified = false;
-    for (let i = 0; i < text.length; i++) {
-      const c = text.charCodeAt(i);
+    let wordHasPersian = false;
+    let wordHasLatin = false;
+    let inWord = false;
+    // Last strong-character class we saw: 0 = neither, 1 = Persian, 2 = Latin.
+    // Used as a tiebreaker for Latin-majority sentences that end in Persian
+    // (e.g. "Wrapper Class چیست؟" — the ending "چیست" makes it a Persian
+    // question and it should render RTL).
+    let lastStrong = 0;
+
+    for (let i = 0; i <= text.length; i++) {
+      const c = i < text.length ? text.charCodeAt(i) : 32;
       const isSpace =
         c === 32 || c === 9 || c === 10 || c === 13 ||
         c === 0x00A0 || c === 0x2028 || c === 0x2029;
       if (isSpace) {
-        wordClassified = false;
+        if (inWord) {
+          // A word with ANY Persian character counts as Persian.
+          if (wordHasPersian) p++;
+          else if (wordHasLatin) l++;
+        }
+        inWord = false;
+        wordHasPersian = false;
+        wordHasLatin = false;
         continue;
       }
-      if (wordClassified) continue;
-      if (
+      inWord = true;
+      const isPersian =
         (c >= 0x0600 && c <= 0x06FF) ||
         (c >= 0x0750 && c <= 0x077F) ||
         (c >= 0x08A0 && c <= 0x08FF) ||
         (c >= 0xFB50 && c <= 0xFDFF) ||
-        (c >= 0xFE70 && c <= 0xFEFF)
-      ) {
-        p++;
-        wordClassified = true;
-      } else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) {
-        l++;
-        wordClassified = true;
+        (c >= 0xFE70 && c <= 0xFEFF);
+      const isLatin = (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+      if (isPersian) {
+        wordHasPersian = true;
+        lastStrong = 1;
+      } else if (isLatin) {
+        wordHasLatin = true;
+        lastStrong = 2;
       }
     }
+
     if (p === 0) return null;
-    const persianWins = strict ? p > l : p >= l;
-    return persianWins ? "rtl" : "ltr";
+    if (strict) return p > l ? "rtl" : "ltr";
+    // Non-strict rule: RTL if EITHER
+    //   (a) Persian is at least ~1/3 of the strong words (p*2 >= l), OR
+    //   (b) the sentence ends in Persian.
+    // This covers Persian sentences that use many English technical terms:
+    //   "تبدیل Primitive به Wrapper → Boxing"  (2P, 3L, ends Latin)  -> RTL
+    //   "Wrapper Class چیست؟"                (1P, 2L, ends Persian) -> RTL
+    //   "I prefer «شرط ثابت» ... term"         (4P, 12L, ends Latin) -> LTR
+    if (p * 2 >= l) return "rtl";
+    return lastStrong === 1 ? "rtl" : "ltr";
   }
 
   function isCodey(el) {
