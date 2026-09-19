@@ -1,26 +1,27 @@
 /*
- * Farsi_RTL — v1.21
+ * Farsi_RTL
  *
  * Three direction modes chosen from the popup:
- *   - "always" : any Persian character in the paragraph -> RTL
- *   - "smart"  : multi-signal vote (see below)
- *   - "auto"   : never override direction; only isolate Latin runs
+ *   - "always"   : any Persian character in the paragraph -> RTL
+ *   - "smart"    : multi-signal vote (see below)
+ *   - "auto"     : never override direction; only isolate Latin runs
  *
  * Smart mode combines three signals per paragraph in a weighted vote:
- *   1. CLD3 via chrome.i18n.detectLanguage (weight 2)
+ *   1. CLD3 via chrome.i18n.detectLanguage (weight 2, most accurate)
  *   2. Heuristic word count + last-strong tiebreaker  (weight 1)
  *   3. Context — this page's running Persian/Latin ratio (weight 1)
  *
  * Every paragraph respects a session-only user override: select any text
- * inside it, click the floating ⇄ button that appears below the
- * selection, and only that paragraph flips. Refreshing the page wipes
- * overrides; the mode picks direction again.
+ * inside a paragraph, click the floating ⇄ button that appears to the
+ * right, and that paragraph alone flips. Refreshing the page wipes
+ * overrides so the mode picks direction from scratch.
  *
- * Latin runs are wrapped in <bdi> so no invisible bidi chars land in the
- * DOM. Multi-word Latin phrases (letters, digits, dots, hyphens, commas
- * and spaces) stay in ONE bdi so the browser doesn't reverse their
- * visual order inside an RTL paragraph. Input areas (contenteditable and
- * textarea) are never marked or wrapped.
+ * Latin runs are wrapped in <bdi> so no invisible bidi chars ever land in
+ * the DOM. Multi-word Latin phrases (letters, digits, dots, hyphens,
+ * commas and spaces) stay inside ONE bdi so the browser doesn't reverse
+ * their visual order inside an RTL paragraph. Input areas
+ * (contenteditable and textarea) are never marked or wrapped so the
+ * user's prompt stays pristine.
  */
 
 (function () {
@@ -47,7 +48,6 @@
   ]);
 
   let mode = "smart";
-  let fontOn = false;
 
   // Context signal: running counts of paragraphs marked on THIS page.
   let ctxRtl = 0;
@@ -506,9 +506,8 @@
   }
 
   function applyFont(on) {
-    fontOn = !!on;
     ensureStyle();
-    document.documentElement.classList.toggle(CLASS_FONT, fontOn);
+    document.documentElement.classList.toggle(CLASS_FONT, !!on);
   }
 
   // ------- Selection-based flip button (per-paragraph manual override) -------
@@ -650,6 +649,9 @@
 
   // ------- Copy handler (strip legacy LRI/PDI markers) -------
 
+  // Same set of bidi isolate control characters as OLD_ISOLATE_CHARS
+  // above — kept as a separate regex only so the two callers don't share
+  // .lastIndex state.
   const ISO_STRIP_RE = /[⁦-⁩]/g;
   function onCopy(e) {
     try {
