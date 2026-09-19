@@ -1,13 +1,34 @@
-const KEY_RTL = "rtlEnabled";
-const KEY_FONT = "fontEnabled";
+const KEY_MODE = "rtlMode";      // "always" | "smart" | "auto"
+const KEY_FONT = "fontEnabled";  // boolean
+const KEY_OLD_RTL = "rtlEnabled"; // legacy boolean, migrated on load
 
-const rtlEl = document.getElementById("toggle-rtl");
+const MODE_DESC = {
+  always: "هر پاراگرافی که فارسی داشته باشه راست‌چین می‌شه",
+  smart: "تشخیص هوشمند با مدل CLD3 گوگل + شمارش کلمه",
+  auto: "بدون تغییر جهت — فقط bidi و فونت اعمال می‌شن"
+};
+
 const fontEl = document.getElementById("toggle-font");
+const descEl = document.getElementById("mode-desc");
+const modeRadios = document.querySelectorAll('input[name="rtl-mode"]');
 
-chrome.storage.sync.get({ [KEY_RTL]: true, [KEY_FONT]: false }, (res) => {
-  rtlEl.checked = res[KEY_RTL] !== false;
-  fontEl.checked = res[KEY_FONT] === true;
-});
+chrome.storage.sync.get(
+  { [KEY_MODE]: null, [KEY_FONT]: false, [KEY_OLD_RTL]: true },
+  async (res) => {
+    let mode = res[KEY_MODE];
+    if (!mode) {
+      mode = res[KEY_OLD_RTL] === false ? "auto" : "smart";
+      await chrome.storage.sync.set({ [KEY_MODE]: mode });
+    }
+    setRadio(mode);
+    fontEl.checked = res[KEY_FONT] === true;
+  }
+);
+
+function setRadio(mode) {
+  for (const r of modeRadios) r.checked = (r.value === mode);
+  descEl.textContent = MODE_DESC[mode] || "";
+}
 
 async function pushToActiveTab(payload) {
   try {
@@ -19,11 +40,15 @@ async function pushToActiveTab(payload) {
   } catch (_) { /* ignore */ }
 }
 
-rtlEl.addEventListener("change", async () => {
-  const enabled = rtlEl.checked;
-  await chrome.storage.sync.set({ [KEY_RTL]: enabled });
-  pushToActiveTab({ type: "farsi-toggle", rtl: enabled });
-});
+for (const r of modeRadios) {
+  r.addEventListener("change", async () => {
+    if (!r.checked) return;
+    const mode = r.value;
+    descEl.textContent = MODE_DESC[mode] || "";
+    await chrome.storage.sync.set({ [KEY_MODE]: mode });
+    pushToActiveTab({ type: "farsi-toggle", mode });
+  });
+}
 
 fontEl.addEventListener("change", async () => {
   const enabled = fontEl.checked;
