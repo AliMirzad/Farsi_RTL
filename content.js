@@ -82,10 +82,13 @@
     "padding-right:1.75em!important;padding-left:0!important;" +
     "margin-right:0!important;}\n" +
 
-    "html." + CLASS_RTL + " [" + MARK + "=\"rtl\"] code:not([" + MARK + "])," +
-    "html." + CLASS_RTL + " [" + MARK + "=\"rtl\"] pre:not([" + MARK + "])," +
-    "html." + CLASS_RTL + " [" + MARK + "=\"ltr\"] code:not([" + MARK + "])," +
-    "html." + CLASS_RTL + " [" + MARK + "=\"ltr\"] pre:not([" + MARK + "]){" +
+    // Inline code (NOT the <code> inside a <pre> block) that sits inside
+    // a marked container without carrying its own mark: force LTR so
+    // technical identifiers render correctly inside a Persian sentence.
+    // Code inside a <pre> is excluded because when the user flips a code
+    // block the inner <code> must follow the pre's chosen direction.
+    "html." + CLASS_RTL + " [" + MARK + "=\"rtl\"] code:not(pre code):not([" + MARK + "])," +
+    "html." + CLASS_RTL + " [" + MARK + "=\"ltr\"] code:not(pre code):not([" + MARK + "]){" +
     "direction:ltr!important;text-align:left!important;" +
     "unicode-bidi:isolate!important;}\n" +
 
@@ -167,15 +170,27 @@
     }
   }
 
-  // Latin run: a Latin phrase — letters, digits, dots, underscores,
-  // hyphens, commas AND spaces — kept together in ONE <bdi>. Multi-word
-  // phrases like "compile time" or "Auto-unboxing" have to stay in a
-  // single L block; otherwise the browser's bidi algorithm reverses their
-  // visual order in an RTL paragraph. The run always ends on an
-  // alphanumeric character so trailing punctuation stays outside the bdi
-  // (that's what lets `A)` render with the paren mirrored after A).
+  // Latin run — a Latin phrase kept together in ONE <bdi>. The character
+  // class includes:
+  //   • letters, digits, and everything an identifier can carry
+  //     (`.`, `_`, `-`)
+  //   • common code punctuation: `,;:=!<>+*/%&|?~^#`
+  //   • all four bracket pairs so `A)`, `func(a)`, `arr[i]`, `{x}` stay
+  //     inside the bdi and don't get bidi-mirrored (`)` -> `(` etc.) or
+  //     visually reordered
+  //   • spaces so multi-word phrases like `compile time` and full
+  //     expressions like `active != null` remain a single L block —
+  //     otherwise bidi reverses the neutrals between them and the user
+  //     sees `null =! active`
+  //   • arrows (U+2190–U+21FF and supplemental blocks) so `→` isn't
+  //     mirrored to `←` in an RTL paragraph
+  // The run must end on an alphanumeric character or a closing bracket
+  // so a plain trailing space or Persian punctuation doesn't sneak in.
+  //
+  // The second alternative catches STANDALONE arrow sequences that
+  // aren't attached to Latin letters, e.g. `چپ ← راست`.
   const LATIN_RUN =
-    /[A-Za-z](?:[A-Za-z0-9._\-, ]*[A-Za-z0-9])?(?:\([^()]*\))?/g;
+    /[A-Za-z](?:[A-Za-z0-9._,;:=!<>+*/%&|?~^#\[\](){} ←-⇿⟰-⟿⤀-⥿\-]*[A-Za-z0-9\]})])?|[←-⇿⟰-⟿⤀-⥿]+/g;
   const OLD_ISOLATE_CHARS = /[⁦-⁩]/g;
 
   function wrapLatinInBdi(root) {
@@ -191,7 +206,13 @@
       if (!data) continue;
       const hasOld = OLD_ISOLATE_CHARS.test(data);
       OLD_ISOLATE_CHARS.lastIndex = 0;
-      if (!hasOld && (data.length < 2 || !/[A-Za-z]/.test(data))) continue;
+      // Skip nodes with nothing worth isolating (no Latin letter, no
+      // arrow, no legacy isolate character).
+      if (
+        !hasOld &&
+        (data.length < 1 ||
+          !/[A-Za-z←-⇿⟰-⟿⤀-⥿]/.test(data))
+      ) continue;
       targets.push({ node, hasOld });
     }
     let mutated = false;
@@ -207,7 +228,10 @@
   }
 
   function splitAndWrap(textNode, text) {
-    if (!text || text.length < 2 || !/[A-Za-z]/.test(text)) return false;
+    if (!text || text.length < 1) return false;
+    // Bail early only when there's no character we'd want to wrap. This
+    // also short-circuits the vast majority of pure-Persian text nodes.
+    if (!/[A-Za-z←-⇿⟰-⟿⤀-⥿]/.test(text)) return false;
     LATIN_RUN.lastIndex = 0;
     const pieces = [];
     let lastIndex = 0;
@@ -358,17 +382,29 @@
     if (overrideDir) { cb(overrideDir); return; }
 
     if (mode === "auto") { cb(null); return; }
+
+    const isCode = isCodey(el);
+
+    // Code blocks are structural — auto-flipping them to RTL because
+    // there are Persian comments would break code layout. Only the
+    // strict word-count heuristic applies here (Persian words STRICTLY
+    // greater than Latin words), and the user can still flip a code
+    // block manually with the ⇄ button.
+    if (isCode) {
+      cb(detectHeuristic(text, true));
+      return;
+    }
+
     if (mode === "always") {
       cb(hasAnyPersian(text) ? "rtl" : null);
       return;
     }
 
-    // Smart mode: multi-signal vote. Persian is required — an all-Latin
-    // paragraph is left alone.
+    // Smart mode for regular text: multi-signal vote. Persian is required
+    // — an all-Latin paragraph is left alone.
     if (!hasAnyPersian(text)) { cb(null); return; }
 
-    const isCode = isCodey(el);
-    const heur = detectHeuristic(text, isCode);
+    const heur = detectHeuristic(text, false);
     const ctx = detectContext();
     detectCLD3(text, function (cld3) {
       // Vote. CLD3 has weight 2 because it is the most accurate signal.
@@ -626,10 +662,17 @@
     if (!node) { hideFlipBtn(); return; }
     // Target the TIGHTEST paragraph-level container the user's selection
     // sits inside — the individual <li>, <p>, <td> etc. — not some outer
-    // <ul> or wrapper. That way flipping a single answer in a list only
-    // flips that one line.
-    const target = node.closest && node.closest(SEL);
+    // <ul> or wrapper. So flipping a single answer in a list only flips
+    // that one line.
+    let target = node.closest && node.closest(SEL);
     if (!target || target.closest(INPUT_SKIP)) { hideFlipBtn(); return; }
+    // Exception: if the tightest match is a <code> that lives inside a
+    // <pre> block, the user meant to flip the WHOLE code block. Walk up
+    // to the enclosing <pre>.
+    if (target.tagName === "CODE") {
+      const pre = target.closest("pre");
+      if (pre) target = pre;
+    }
     const rect = range.getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) {
       hideFlipBtn();
