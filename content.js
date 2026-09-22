@@ -39,6 +39,7 @@
   const KEY_DEBUG = "debugMode";
   const KEY_LH = "lineSpacing";
   const KEY_SITES = "siteOff";   // { "claude.ai": true } means OFF there
+  const KEY_OVERRIDES = "overrides";   // storage.local: hash -> "rtl" | "ltr"
   const KEY_OLD_RTL = "rtlEnabled";
 
   const CLASS_RTL = "farsi-rtl-on";
@@ -441,8 +442,22 @@
   }
 
   // A Map keeps insertion order, so dropping the oldest key is enough to
-  // keep a long session from growing one entry per manual flip forever.
+  // keep this from growing one entry per manual flip forever. The cap
+  // matters more now that these outlive the tab.
   const MAX_OVERRIDES = 500;
+  let saveTimer = 0;
+
+  function saveOverrides() {
+    // Debounced: a user correcting a few paragraphs in a row should cost
+    // one write, not one per flip.
+    if (saveTimer) return;
+    saveTimer = setTimeout(function () {
+      saveTimer = 0;
+      const obj = {};
+      overrides.forEach(function (v, k) { obj[k] = v; });
+      try { chrome.storage.local.set({ [KEY_OVERRIDES]: obj }); } catch (_) {}
+    }, 400);
+  }
 
   function setOverride(text, dir) {
     const key = hashText(text);
@@ -450,6 +465,22 @@
       overrides.delete(overrides.keys().next().value);
     }
     overrides.set(key, dir);
+    saveOverrides();
+  }
+
+  function loadOverrides(cb) {
+    try {
+      chrome.storage.local.get({ [KEY_OVERRIDES]: {} }, function (res) {
+        const obj = (res && res[KEY_OVERRIDES]) || {};
+        const keys = Object.keys(obj);
+        // Oldest first, so the cap drops the oldest if the stored set is
+        // somehow larger than the cap.
+        for (let i = Math.max(0, keys.length - MAX_OVERRIDES); i < keys.length; i++) {
+          overrides.set(keys[i], obj[keys[i]]);
+        }
+        cb();
+      });
+    } catch (_) { cb(); }
   }
 
   // ------------------------- streaming probe -------------------------
@@ -1384,11 +1415,24 @@
     btnTarget = targetEl;
   }
 
-  function onFlipClick(e) {
-    e.stopPropagation();
-    e.preventDefault();
-    const target = mousedownTarget || btnTarget;
-    mousedownTarget = null;
+  // The paragraph the caret or selection is sitting in — the same target
+  // the ⇄ button uses, so the shortcut and the button always agree.
+  function selectionTarget() {
+    const sel = document.getSelection && document.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node = sel.getRangeAt(0).startContainer;
+    if (node && node.nodeType === 3) node = node.parentElement;
+    if (!node || !node.closest) return null;
+    let target = node.closest(SEL);
+    if (!target || target.closest(INPUT_SKIP)) return null;
+    if (target.tagName === "CODE") {
+      const pre = target.closest("pre");
+      if (pre) target = pre;
+    }
+    return target;
+  }
+
+  function flipTarget(target) {
     if (!target || !target.isConnected) return;
     const text = target.textContent;
     const current = target.getAttribute(MARK) === "rtl" ? "rtl" : "ltr";
@@ -1406,8 +1450,22 @@
     void target.offsetWidth;
     guardFlip(target, flipped);
     enqueue(target);
+  }
+
+  function onFlipClick(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    const target = mousedownTarget || btnTarget;
+    mousedownTarget = null;
+    flipTarget(target);
     hideFlipBtn();
     try { document.getSelection().removeAllRanges(); } catch (_) {}
+  }
+
+  function flipFromShortcut() {
+    if (!running) return;
+    flipTarget(selectionTarget());
+    hideFlipBtn();
   }
 
   // If a framework re-render undoes our attribute/inline style right after
@@ -1515,6 +1573,7 @@
     wasStreaming = s;
   }, 500);
 
+  loadOverrides(function () {
   chrome.storage.sync.get(
     { [KEY_MODE]: null, [KEY_FONT]: false, [KEY_DEBUG]: false,
       [KEY_LH]: false, [KEY_SITES]: {}, [KEY_OLD_RTL]: true },
@@ -1532,6 +1591,7 @@
       if (wantDebug && running) applyDebug(true);
     }
   );
+  });
 
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== "sync") return;
@@ -1552,6 +1612,7 @@
     if ("font" in msg) applyFont(msg.font);
     if ("lineSpacing" in msg) applyLineHeight(msg.lineSpacing);
     if ("debug" in msg) applyDebug(msg.debug);
+    if (msg.flip) flipFromShortcut();
     if (sendResponse) sendResponse({ ok: true });
   });
 })();

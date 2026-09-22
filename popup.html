@@ -61,6 +61,16 @@
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   .site-note { display:block; font:400 10px/1.4 'Vazirmatn'; color:var(--faint); margin-top:2px; }
+  /* A page the extension does not run on: say so, and make the switch
+     inert rather than leaving it sitting there implying otherwise. */
+  .site.unsupported { opacity:.55; }
+  .site.unsupported .sw { pointer-events:none; }
+  .site-dot {
+    width:7px; height:7px; border-radius:50%; flex-shrink:0;
+    background:var(--accent); box-shadow:0 0 0 3px rgba(16,185,129,.16);
+  }
+  .site.off .site-dot { background:#4d545f; box-shadow:none; }
+  .site.unsupported .site-dot { background:#3a414d; box-shadow:none; }
 
   /* Two settings that only change how text looks, kept together and small. */
   .pair { margin:0 12px; border:1px solid var(--line); border-radius:11px; background:var(--card); }
@@ -196,7 +206,8 @@
     <a class="ver" id="ver" href="#" target="_blank" rel="noopener"></a>
   </div>
 
-  <div class="site">
+  <div class="site" id="site-row">
+    <span class="site-dot" aria-hidden="true"></span>
     <span class="site-text">
       <span class="site-host" id="site-host">—</span>
       <span class="site-note" id="site-note">در این سایت فعال است</span>
@@ -288,6 +299,7 @@
     <span class="credit">created by Ali Mirzad</span>
   </div>
 
+  <script src="match.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

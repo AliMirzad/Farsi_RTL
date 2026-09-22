@@ -6,3 +6,7 @@ Thumbs.db
 node_modules/
 .vscode/
 .idea/
+
+# build output: the release zip is uploaded as a release asset,
+# not committed
+dist/

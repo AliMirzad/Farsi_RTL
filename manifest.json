@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Farsi_RTL",
-  "version": "1.34.0",
-  "description": "راست‌چین‌سازی هوشمند فارسی + فونت Vazirmatn برای چت‌بات‌های هوش مصنوعی",
+  "version": "1.36.0",
+  "description": "راست‌چین‌سازی هوشمند فارسی + فونت Vazirmatn برای چت‌بات‌های هوش مصنوعی — Smart RTL for AI chats (Persian, Arabic, Hebrew, Urdu)",
   "homepage_url": "https://github.com/alimirzad/Farsi_RTL",
   "permissions": [
     "storage",
@@ -34,7 +34,9 @@
         "https://gemini.google.com/*",
         "https://grok.com/*",
         "https://perplexity.ai/*",
-        "https://www.perplexity.ai/*"
+        "https://www.perplexity.ai/*",
+        "https://uxpilot.ai/*",
+        "https://www.uxpilot.ai/*"
       ],
       "js": [
         "engine.js",
@@ -56,8 +58,30 @@
         "https://gemini.google.com/*",
         "https://grok.com/*",
         "https://perplexity.ai/*",
-        "https://www.perplexity.ai/*"
+        "https://www.perplexity.ai/*",
+        "https://uxpilot.ai/*",
+        "https://www.uxpilot.ai/*"
       ]
     }
-  ]
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "commands": {
+    "flip-paragraph": {
+      "suggested_key": {
+        "default": "Alt+Shift+F"
+      },
+      "description": "تغییر جهت پاراگرافی که متنش انتخاب شده / Flip the selected paragraph"
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "farsi-rtl@alimirzad",
+      "strict_min_version": "121.0"
+    }
+  }
 }
