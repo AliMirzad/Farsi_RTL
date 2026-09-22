@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Farsi_RTL",
-  "version": "1.27.0",
-  "description": "راست‌چین‌سازی هوشمند فارسی + فونت Vazir برای ChatGPT و Claude",
-  "permissions": ["storage", "activeTab"],
-  "host_permissions": [
-    "https://chatgpt.com/*",
-    "https://chat.openai.com/*",
-    "https://claude.ai/*"
+  "version": "1.34.0",
+  "description": "راست‌چین‌سازی هوشمند فارسی + فونت Vazirmatn برای چت‌بات‌های هوش مصنوعی",
+  "homepage_url": "https://github.com/alimirzad/Farsi_RTL",
+  "permissions": [
+    "storage",
+    "activeTab"
   ],
   "icons": {
     "16": "icons/icon16.png",
@@ -30,19 +29,34 @@
       "matches": [
         "https://chatgpt.com/*",
         "https://chat.openai.com/*",
-        "https://claude.ai/*"
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://gemini.google.com/*",
+        "https://grok.com/*",
+        "https://perplexity.ai/*",
+        "https://www.perplexity.ai/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "engine.js",
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["fonts/*.woff2"],
+      "resources": [
+        "fonts/*.woff2"
+      ],
       "matches": [
         "https://chatgpt.com/*",
         "https://chat.openai.com/*",
-        "https://claude.ai/*"
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://gemini.google.com/*",
+        "https://grok.com/*",
+        "https://perplexity.ai/*",
+        "https://www.perplexity.ai/*"
       ]
     }
   ]

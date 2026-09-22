@@ -4,136 +4,289 @@
 <meta charset="UTF-8">
 <title>Farsi_RTL</title>
 <style>
+  /* The extension ships Vazirmatn, so the popup uses it too. */
+  @font-face { font-family:'Vazirmatn'; font-weight:400; font-display:block;
+    src:url("fonts/Vazirmatn-Regular.woff2") format("woff2"); }
+  @font-face { font-family:'Vazirmatn'; font-weight:500; font-display:block;
+    src:url("fonts/Vazirmatn-Medium.woff2") format("woff2"); }
+  @font-face { font-family:'Vazirmatn'; font-weight:700; font-display:block;
+    src:url("fonts/Vazirmatn-Bold.woff2") format("woff2"); }
+
+  :root {
+    --bg:#0f1115;
+    --card:#171a20;
+    --card-on:#16251f;
+    --line:rgba(255,255,255,.07);
+    --line-hi:rgba(255,255,255,.14);
+    --text:#e7e9ee;
+    --faint:#646b78;
+    --accent:#10b981;
+  }
+  * { box-sizing:border-box; }
   body {
-    font-family: Tahoma, Segoe UI, sans-serif;
-    width: 270px;
-    margin: 0;
-    padding: 16px;
-    background: #1f2937;
-    color: #f3f4f6;
+    width:312px; margin:0;
+    background:var(--bg); color:var(--text);
+    font-family:'Vazirmatn', Tahoma, sans-serif;
+    -webkit-font-smoothing:antialiased;
   }
-  h1 { font-size: 14px; margin: 0 0 14px; text-align: center; font-weight: 600; }
-  .card {
-    background: #374151;
-    border-radius: 10px;
-    padding: 12px;
+
+  /* ---------- header ---------- */
+  .head { display:flex; align-items:center; gap:9px; padding:13px 15px; }
+  .logo {
+    width:26px; height:26px; border-radius:8px; flex-shrink:0;
+    background:linear-gradient(145deg,#18d194,#059669);
+    display:grid; place-items:center;
   }
-  .card + .card { margin-top: 10px; }
-  .caption {
-    font-size: 12px;
-    color: #9ca3af;
-    margin-bottom: 8px;
+  .logo svg { width:15px; height:15px; display:block; }
+  .nm { font:700 12.5px/1 'Vazirmatn'; direction:ltr; text-align:end; }
+  .ver {
+    margin-inline-start:auto;
+    font:400 10px/1 'Vazirmatn'; color:var(--faint);
+    direction:ltr; text-decoration:none;
   }
-  .segmented {
-    display: flex;
-    background: #1f2937;
-    border-radius: 8px;
-    padding: 3px;
-    gap: 3px;
+  .ver:hover { color:var(--accent); }
+
+  .sect { font:500 10.5px/1 'Vazirmatn'; color:var(--faint); padding:0 17px 8px; }
+
+  /* The site row sits above everything because it answers the question
+     people actually arrive with: "turn it off, it is breaking this page". */
+  .site {
+    display:flex; align-items:center; gap:9px;
+    margin:0 12px 12px; padding:9px 12px;
+    border:1px solid var(--line); border-radius:11px; background:var(--card);
   }
-  .segmented label {
-    flex: 1;
-    text-align: center;
-    padding: 6px 4px;
-    font-size: 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    user-select: none;
-    transition: background .15s, color .15s;
+  .site-text { flex:1; min-width:0; }
+  .site-host {
+    display:block; font:600 12px/1.3 'Vazirmatn'; direction:ltr; text-align:end;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .segmented input { display: none; }
-  .segmented input:checked + span {
-    background: #10b981;
-    color: white;
-    display: block;
-    padding: 6px 4px;
-    border-radius: 6px;
-    margin: -6px -4px;
+  .site-note { display:block; font:400 10px/1.4 'Vazirmatn'; color:var(--faint); margin-top:2px; }
+
+  /* Two settings that only change how text looks, kept together and small. */
+  .pair { margin:0 12px; border:1px solid var(--line); border-radius:11px; background:var(--card); }
+  .pair .frow { padding:9px 12px; }
+  .pair .frow + .frow { border-top:1px solid var(--line); }
+
+  /* ---------- mode cards ---------- */
+  .opts { display:grid; gap:5px; padding:0 12px; }
+  .opt {
+    position:relative; display:flex; align-items:center; gap:10px;
+    padding:9px 11px;
+    border:1px solid var(--line); border-radius:11px; background:var(--card);
+    cursor:pointer; transition:background .16s, border-color .16s;
   }
-  .segmented label span {
-    display: block;
-    color: #d1d5db;
+  .opt:hover { border-color:var(--line-hi); }
+  .opt input { position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
+
+  .dot {
+    width:15px; height:15px; border-radius:50%; flex-shrink:0;
+    border:1.5px solid #454b57; display:grid; place-items:center;
+    transition:border-color .16s;
   }
-  .mode-desc {
-    font-size: 11px;
-    color: #9ca3af;
-    margin-top: 10px;
-    text-align: center;
-    line-height: 1.5;
-    min-height: 16px;
+  .dot::after {
+    content:""; width:7px; height:7px; border-radius:50%;
+    background:var(--accent); transform:scale(0);
+    transition:transform .16s cubic-bezier(.4,0,.2,1);
   }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  .opt:has(input:checked) { background:var(--card-on); border-color:rgba(16,185,129,.42); }
+  .opt:has(input:checked) .dot { border-color:var(--accent); }
+  .opt:has(input:checked) .dot::after { transform:scale(1); }
+  .opt:has(input:focus-visible) { outline:2px solid var(--accent); outline-offset:2px; }
+
+  .txt { flex:1; min-width:0; display:block; }
+  .t1 { display:block; font:500 12.5px/1.3 'Vazirmatn'; }
+  .t2 { display:block; font:400 10px/1.45 'Vazirmatn'; color:var(--faint); margin-top:3px; }
+
+  /* The specimen is the explanation: the bars sit where the text would.
+     "همیشه" is all right-aligned, "پیش‌فرض" all left, and "هوشمند" mixed —
+     which is exactly what the mode does, line by line. */
+  .spec { width:38px; display:grid; gap:3.5px; flex-shrink:0; }
+  .spec i { display:block; height:3px; border-radius:2px; background:#3a414d;
+            transition:background .16s; }
+  .spec i:nth-child(1) { width:100%; }
+  .spec i:nth-child(2) { width:70%; }
+  .spec i:nth-child(3) { width:46%; }
+  /* justify-self, not auto margins: inside an RTL grid, start IS the right
+     edge, which is what an RTL specimen should hug. Auto margins push the
+     other way and silently mirrored all three specimens. */
+  .spec.r i { justify-self:start; }
+  .spec.l i { justify-self:end; }
+  .spec.mix i:nth-child(1) { justify-self:start; }
+  .spec.mix i:nth-child(2) { justify-self:end; }
+  .spec.mix i:nth-child(3) { justify-self:start; }
+  .opt:has(input:checked) .spec i { background:var(--accent); opacity:.85; }
+
+  /* ---------- font row ---------- */
+  .rule { border:0; border-top:1px solid var(--line); margin:12px 15px; }
+  .frow { display:flex; align-items:center; gap:10px; }
+  .sw { position:relative; width:36px; height:21px; margin-inline-start:auto; flex-shrink:0; }
+  .sw input { position:absolute; opacity:0; width:0; height:0; }
+  .tr {
+    position:absolute; inset:0; background:#232830;
+    border:1px solid var(--line-hi); border-radius:99px; cursor:pointer;
+    transition:background .2s, border-color .2s;
   }
-  .label { font-size: 13px; }
-  .switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
-  .switch input { opacity: 0; width: 0; height: 0; }
-  .slider {
-    position: absolute; inset: 0;
-    background: #6b7280;
-    border-radius: 22px;
-    cursor: pointer;
-    transition: background .2s;
+  .tr::before {
+    content:""; position:absolute; width:15px; height:15px;
+    top:2px; inset-inline-start:2px;
+    background:#9aa1ad; border-radius:50%;
+    transition:inset-inline-start .2s cubic-bezier(.4,0,.2,1), background .2s;
   }
-  .slider::before {
-    content: "";
-    position: absolute;
-    width: 16px; height: 16px;
-    right: 3px; top: 3px;
-    background: white;
-    border-radius: 50%;
-    transition: right .2s;
+  input:checked + .tr { background:var(--accent); border-color:transparent; }
+  input:checked + .tr::before { inset-inline-start:18px; background:#fff; }
+  input:focus-visible + .tr { outline:2px solid var(--accent); outline-offset:2px; }
+
+  /* ---------- tip + footer ---------- */
+  /* The per-paragraph flip is the one feature nothing on the page
+     announces, so the callout shows the actual button rather than
+     describing it — the user has to recognise it, not read about it. */
+  .callout {
+    display:flex; gap:10px; align-items:flex-start;
+    margin:12px 12px 0; padding:10px 11px;
+    background:rgba(16,185,129,.085);
+    border:1px solid rgba(16,185,129,.22);
+    border-radius:11px;
   }
-  input:checked + .slider { background: #10b981; }
-  input:checked + .slider::before { right: 21px; }
-  .credit {
-    margin-top: 14px;
-    font-size: 11px;
-    color: #9ca3af;
-    text-align: center;
-    letter-spacing: .5px;
-    border-top: 1px solid #374151;
-    padding-top: 10px;
-    direction: ltr;
-    font-family: system-ui, sans-serif;
+  .callout .btn {
+    width:24px; height:24px; flex-shrink:0; margin-top:1px;
+    border-radius:7px; background:var(--accent);
+    border:1px solid rgba(255,255,255,.22);
+    box-shadow:0 2px 6px rgba(0,0,0,.22), 0 0 0 3px rgba(16,185,129,.14);
+    display:grid; place-items:center;
+  }
+  .callout .btn svg { width:13px; height:13px; display:block; }
+  .c1 { display:block; font:700 11px/1.45 'Vazirmatn'; color:#dfe3ea; }
+  .c2 { display:block; font:400 10px/1.7 'Vazirmatn'; color:#97a0ab; margin-top:3px; }
+  .c3 { color:var(--faint); }
+  .foot {
+    display:flex; align-items:center; justify-content:space-between;
+    font:400 9.5px/1 'Vazirmatn'; color:#4d545f;
+    padding:10px 16px; margin-top:2px;
+  }
+  .credit { direction:ltr; letter-spacing:.2px; }
+  /* A developer switch, kept deliberately quiet: it is useful to have, but
+     it is not something a reader of Persian chat answers needs to see. */
+  .dbg {
+    display:flex; align-items:center; gap:5px;
+    font:400 9.5px/1 'Vazirmatn'; color:#4d545f;
+    background:none; border:0; padding:0; cursor:pointer;
+  }
+  .dbg:hover { color:#8b919e; }
+  .dbg .led {
+    width:6px; height:6px; border-radius:50%;
+    background:#3a414d; transition:background .16s, box-shadow .16s;
+  }
+  .dbg[aria-pressed="true"] { color:var(--accent); }
+  .dbg[aria-pressed="true"] .led {
+    background:var(--accent); box-shadow:0 0 0 2px rgba(16,185,129,.2);
   }
 </style>
 </head>
 <body>
-  <h1>Farsi_RTL</h1>
 
-  <div class="card">
-    <div class="caption">حالت راست‌چین</div>
-    <div class="segmented">
-      <label>
-        <input type="radio" name="rtl-mode" value="always">
-        <span>همیشه</span>
-      </label>
-      <label>
-        <input type="radio" name="rtl-mode" value="smart">
-        <span>هوشمند</span>
-      </label>
-      <label>
-        <input type="radio" name="rtl-mode" value="auto">
-        <span>پیش‌فرض</span>
-      </label>
+  <div class="head">
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#04291d" stroke-width="2.4"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 7H8"/><path d="m12 3-4 4 4 4"/>
+        <path d="M4 17h12"/><path d="m12 13 4 4-4 4"/>
+      </svg>
     </div>
-    <div class="mode-desc" id="mode-desc"></div>
+    <div class="nm">Farsi_RTL</div>
+    <a class="ver" id="ver" href="#" target="_blank" rel="noopener"></a>
   </div>
 
-  <div class="card">
-    <div class="row">
-      <span class="label">فونت Vazir</span>
-      <label class="switch">
+  <div class="site">
+    <span class="site-text">
+      <span class="site-host" id="site-host">—</span>
+      <span class="site-note" id="site-note">در این سایت فعال است</span>
+    </span>
+    <label class="sw">
+      <input type="checkbox" id="toggle-site" checked>
+      <span class="tr"></span>
+    </label>
+  </div>
+
+  <div class="sect">پاسخ‌ها چه‌وقت راست‌چین شوند؟</div>
+
+  <div class="opts" role="radiogroup" aria-label="پاسخ‌ها چه‌وقت راست‌چین شوند؟">
+    <label class="opt">
+      <input type="radio" name="rtl-mode" value="smart">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="txt">
+        <span class="t1">هوشمند</span>
+        <span class="t2">وقتی زبانِ خودِ پاراگراف فارسی باشد</span>
+      </span>
+      <span class="spec mix" aria-hidden="true"><i></i><i></i><i></i></span>
+    </label>
+
+    <label class="opt">
+      <input type="radio" name="rtl-mode" value="always">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="txt">
+        <span class="t1">همیشه</span>
+        <span class="t2">هر پاراگرافی که یک کلمه فارسی دارد</span>
+      </span>
+      <span class="spec r" aria-hidden="true"><i></i><i></i><i></i></span>
+    </label>
+
+    <label class="opt">
+      <input type="radio" name="rtl-mode" value="auto">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="txt">
+        <span class="t1">هیچ‌وقت</span>
+        <span class="t2">جهت دست‌نخورده؛ فقط فونت و اصلاح bidi</span>
+      </span>
+      <span class="spec l" aria-hidden="true"><i></i><i></i><i></i></span>
+    </label>
+  </div>
+
+  <hr class="rule">
+
+  <div class="pair">
+    <div class="frow">
+      <span class="txt">
+        <span class="t1">فونت Vazirmatn</span>
+        <span class="t2">جایگزینی فونت متن‌های فارسی</span>
+      </span>
+      <label class="sw">
         <input type="checkbox" id="toggle-font">
-        <span class="slider"></span>
+        <span class="tr"></span>
+      </label>
+    </div>
+    <div class="frow">
+      <span class="txt">
+        <span class="t1">فاصله‌ی سطرها</span>
+        <span class="t2">فارسی در همین اندازه به فضای بیشتری نیاز دارد</span>
+      </span>
+      <label class="sw">
+        <input type="checkbox" id="toggle-lh">
+        <span class="tr"></span>
       </label>
     </div>
   </div>
 
-  <div class="credit">created by Ali Mirzad</div>
+  <div class="callout">
+    <span class="btn" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#04291d" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 7H8"/><path d="m12 3-4 4 4 4"/>
+        <path d="M4 17h12"/><path d="m12 13 4 4-4 4"/>
+      </svg>
+    </span>
+    <span>
+      <span class="c1">چیدمانِ یک پاراگراف درست نیست؟</span>
+      <span class="c2">متنش را انتخاب کن تا همین دکمه ظاهر شود؛ زدنش جهتِ همان
+      پاراگراف را برعکس می‌کند <span class="c3">— تا رفرشِ بعدی.</span></span>
+    </span>
+  </div>
+
+  <div class="foot">
+    <button class="dbg" id="toggle-debug" type="button" aria-pressed="false">
+      <span class="led" aria-hidden="true"></span>حالت تشخیص
+    </button>
+    <span class="credit">created by Ali Mirzad</span>
+  </div>
 
   <script src="popup.js"></script>
 </body>

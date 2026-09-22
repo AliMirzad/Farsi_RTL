@@ -3,7 +3,7 @@
  *
  * Three direction modes chosen from the popup:
  *   - "always" : any Persian character in the paragraph -> RTL
- *   - "smart"  : character-ratio + first-strong decision (see decideSync)
+ *   - "smart"  : matrix-language decision (see engine.js)
  *   - "auto"   : never override direction; only isolate risky Latin runs
  *
  * DESIGN NOTE — why this file is careful about WHEN it touches the DOM
@@ -36,6 +36,9 @@
 
   const KEY_MODE = "rtlMode";
   const KEY_FONT = "fontEnabled";
+  const KEY_DEBUG = "debugMode";
+  const KEY_LH = "lineSpacing";
+  const KEY_SITES = "siteOff";   // { "claude.ai": true } means OFF there
   const KEY_OLD_RTL = "rtlEnabled";
 
   const CLASS_RTL = "farsi-rtl-on";
@@ -43,17 +46,29 @@
   const MARK = "data-farsi-rtl";
   const ISO_ATTR = "data-farsi-iso";
   const BTN_ID = "farsi-flip-btn";
+  const CLASS_INPUT = "farsi-input-on";
+  const CLASS_DEBUG = "farsi-debug-on";
+  const CLASS_LH = "farsi-lh-on";
+  const RULE_ATTR = "data-farsi-rule";
+  const PANEL_ID = "farsi-debug-panel";
+  const DIR_ATTR = "data-farsi-dir";   // marks a dir="auto" WE added
 
   // `code:not(pre code)` keeps every <code> inside a code block out of the
   // query entirely: those must follow their <pre>'s direction, so matching
   // them only to reject them later was wasted work on every sweep.
   const SEL =
-    "p,li,ul,ol,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd," +
+    "p,li,ul,ol,table,h1,h2,h3,h4,h5,h6,blockquote,td,th,dt,dd," +
     "figcaption,summary,pre,code:not(pre code)";
 
   const INPUT_SKIP =
     'textarea, [contenteditable="true"], [contenteditable=""], ' +
     '[contenteditable="plaintext-only"]';
+
+  // Blocks inside an editable box that each act as their own paragraph.
+  const EDIT_BLOCKS = new Set([
+    "P", "DIV", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE"
+  ]);
+  const EDIT_BLOCK_SEL = "p,div,li,h1,h2,h3,h4,h5,h6,blockquote,pre";
 
   // Subtrees we never restructure. Highlighters rebuild these constantly
   // and their layout depends on exact text-node boundaries.
@@ -62,10 +77,13 @@
   // Site markers that mean "an answer is being generated right now".
   // Deliberately loose: these are a fast hint, not the only guard. If a
   // site renames every one of them the mutation-activity meter below still
-  // catches the stream, so nothing here is load-bearing.
+  // catches the stream, so nothing here is load-bearing — which is why the
+  // one substring-matching selector ([class*="streaming"]) was dropped:
+  // it scanned every class attribute in the document twice a second to
+  // re-derive something the meter already knows.
   const STREAM_MARKERS =
     '[data-is-streaming="true"], [data-streaming="true"], ' +
-    '[data-message-streaming="true"], [class*="streaming"], ' +
+    '[data-message-streaming="true"], ' +
     'button[data-testid*="stop"], button[aria-label*="Stop"], ' +
     'button[aria-label*="stop"]';
 
@@ -128,13 +146,22 @@
     "@font-face{font-family:'Vazirmatn';font-style:normal;font-weight:700;" +
     "font-display:swap;src:url(\"" + FONT_BOLD + "\") format(\"woff2\");}\n" +
 
-    "html." + CLASS_RTL + " [" + MARK + "=\"rtl\"]{" +
+    "html." + CLASS_RTL + " [" + MARK + "=\"rtl\"]:not(table){" +
     "direction:rtl!important;text-align:right!important;" +
     "unicode-bidi:isolate!important;}\n" +
 
-    "html." + CLASS_RTL + " [" + MARK + "=\"ltr\"]{" +
+    "html." + CLASS_RTL + " [" + MARK + "=\"ltr\"]:not(table){" +
     "direction:ltr!important;text-align:left!important;" +
     "unicode-bidi:isolate!important;}\n" +
+
+    // A table takes direction ONLY. `direction` on the table element is
+    // what orders its columns — without it a Persian table keeps its
+    // columns running left to right while every cell inside is
+    // right-aligned. text-align is deliberately left off: each cell
+    // decides its own, and an inherited one would drag unmarked cells
+    // (numbers, dates) along with it.
+    "html." + CLASS_RTL + " table[" + MARK + "=\"rtl\"]{direction:rtl!important;}\n" +
+    "html." + CLASS_RTL + " table[" + MARK + "=\"ltr\"]{direction:ltr!important;}\n" +
 
     "html." + CLASS_RTL + " ul[" + MARK + "=\"rtl\"]," +
     "html." + CLASS_RTL + " ol[" + MARK + "=\"rtl\"]{" +
@@ -154,6 +181,13 @@
     "display:inline;font:inherit;color:inherit;" +
     "background:transparent;padding:0;margin:0;border:0;}\n" +
 
+    // A <textarea> has no DOM inside it to mark up, but plaintext gives
+    // each of its lines the direction of that line's first strong
+    // character — which is exactly what a word processor does, and it
+    // costs no JavaScript and no work per keystroke.
+    "html." + CLASS_INPUT + " textarea{" +
+    "unicode-bidi:plaintext!important;text-align:start!important;}\n" +
+
     "html." + CLASS_FONT + " [" + MARK + "=\"rtl\"]{" +
     "font-family:'Vazirmatn',Tahoma,sans-serif!important;}\n" +
 
@@ -163,32 +197,76 @@
     "html." + CLASS_FONT + " code[" + MARK + "]{" +
     "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;}\n" +
 
+    // The flip button sits on top of someone else's page, so it stays
+    // small and quiet: one flat accent colour, a hairline ring to hold it
+    // off any background, and a short scale-in so it does not pop.
+    "@keyframes farsi-btn-in{from{opacity:0;transform:scale(.82);}" +
+    "to{opacity:1;transform:scale(1);}}\n" +
+
+    // Persian needs a little more room between lines than Latin does at
+    // the same size. Code keeps its own spacing: loosening a code block
+    // makes it harder to read, not easier.
+    "html." + CLASS_LH + " [" + MARK + "=\"rtl\"]:not(pre):not(code){" +
+    "line-height:1.95!important;}\n" +
+
+    // Diagnostics. Outlines do not affect layout, so turning this on never
+    // moves anything on the page.
+    "html." + CLASS_DEBUG + " [" + RULE_ATTR + "]{outline:1px dashed rgba(148,163,184,.55)!important;" +
+    "outline-offset:1px!important;}\n" +
+    "html." + CLASS_DEBUG + " [" + MARK + "=\"rtl\"][" + RULE_ATTR + "]{" +
+    "outline:1px solid rgba(16,185,129,.75)!important;}\n" +
+    "html." + CLASS_DEBUG + " [" + MARK + "=\"ltr\"][" + RULE_ATTR + "]{" +
+    "outline:1px solid rgba(245,158,11,.8)!important;}\n" +
+
+    "#" + PANEL_ID + "{position:fixed!important;z-index:2147483646!important;" +
+    "bottom:12px!important;left:12px!important;width:216px!important;" +
+    "background:#0f1115!important;color:#e7e9ee!important;" +
+    "border:1px solid rgba(255,255,255,.12)!important;border-radius:10px!important;" +
+    "padding:9px 10px!important;direction:rtl!important;text-align:right!important;" +
+    "font:12px/1.55 Tahoma,sans-serif!important;" +
+    "box-shadow:0 6px 24px rgba(0,0,0,.45)!important;}\n" +
+    "#" + PANEL_ID + " b{display:block!important;font-size:11px!important;" +
+    "color:#8b919e!important;font-weight:500!important;margin-bottom:5px!important;}\n" +
+    "#" + PANEL_ID + " i{display:flex!important;justify-content:space-between!important;" +
+    "gap:8px!important;white-space:nowrap!important;" +
+    "font-style:normal!important;font-size:11px!important;color:#c2c8d2!important;}\n" +
+    "#" + PANEL_ID + " span{color:#8b919e!important;font-variant-numeric:tabular-nums!important;}\n" +
+    "#" + PANEL_ID + " u{color:#646b78!important;text-decoration:none!important;}\n" +
+    "#" + PANEL_ID + " button{margin-top:7px!important;width:100%!important;" +
+    "background:#10b981!important;color:#04291d!important;border:0!important;" +
+    "border-radius:7px!important;padding:6px!important;cursor:pointer!important;" +
+    "font:600 11px/1 Tahoma,sans-serif!important;}\n" +
+
     "#" + BTN_ID + "{" +
     "position:fixed!important;z-index:2147483647!important;" +
-    "width:34px!important;height:34px!important;" +
+    "width:30px!important;height:30px!important;" +
     "padding:0!important;margin:0!important;" +
-    "border:1px solid rgba(255,255,255,0.18)!important;" +
-    "border-radius:50%!important;" +
-    "background:linear-gradient(135deg,#10b981 0%,#059669 100%)!important;" +
-    "color:#fff!important;line-height:1!important;" +
+    "border:1px solid rgba(255,255,255,0.22)!important;" +
+    "border-radius:9px!important;" +
+    "background:#10b981!important;" +
+    "color:#04241a!important;line-height:1!important;" +
     "cursor:pointer!important;user-select:none!important;" +
-    "box-shadow:0 6px 16px rgba(16,185,129,0.35)," +
-    "0 2px 4px rgba(0,0,0,0.15)!important;" +
+    "box-shadow:0 2px 6px rgba(0,0,0,0.22)," +
+    "0 0 0 3px rgba(16,185,129,0.14)!important;" +
     "display:none!important;opacity:1!important;pointer-events:auto!important;" +
     "box-sizing:border-box!important;text-align:center!important;" +
     "align-items:center!important;justify-content:center!important;" +
     "text-decoration:none!important;overflow:hidden!important;" +
-    "outline:none!important;font:0/0 a!important;}\n" +
-    "#" + BTN_ID + ".on{display:flex!important;}\n" +
-    "#" + BTN_ID + ":hover{" +
-    "background:linear-gradient(135deg,#059669 0%,#047857 100%)!important;" +
-    "box-shadow:0 8px 22px rgba(16,185,129,0.45)," +
-    "0 3px 6px rgba(0,0,0,0.2)!important;}\n" +
-    "#" + BTN_ID + ":active{" +
-    "background:linear-gradient(135deg,#047857 0%,#065f46 100%)!important;" +
-    "box-shadow:0 3px 8px rgba(16,185,129,0.35)!important;}\n" +
+    "outline:none!important;font:0/0 a!important;" +
+    "transition:background .15s,box-shadow .15s,transform .12s!important;}\n" +
+
+    "#" + BTN_ID + ".on{display:flex!important;" +
+    "animation:farsi-btn-in .14s cubic-bezier(.4,0,.2,1)!important;}\n" +
+
+    "#" + BTN_ID + ":hover{background:#0ea975!important;" +
+    "box-shadow:0 3px 10px rgba(0,0,0,0.26)," +
+    "0 0 0 4px rgba(16,185,129,0.2)!important;}\n" +
+
+    "#" + BTN_ID + ":active{background:#0b8f63!important;" +
+    "transform:scale(.94)!important;}\n" +
+
     "#" + BTN_ID + " svg{display:block!important;pointer-events:none!important;" +
-    "width:16px!important;height:16px!important;}";
+    "width:15px!important;height:15px!important;}";
 
   let styleEl = null;
   let observer = null;
@@ -259,130 +337,6 @@
   const HAS_WRAPPABLE = new RegExp("[A-Za-z" + ARROWS + "]");
   const OLD_ISOLATE_CHARS = /[⁦-⁩]/g;
 
-  const P_RANGES = [
-    [0x0600, 0x06FF], [0x0750, 0x077F], [0x08A0, 0x08FF],
-    [0xFB50, 0xFDFF], [0xFE70, 0xFEFF]
-  ];
-
-  function isPersianCode(c) {
-    // Fast path: almost every character in these pages is either ASCII
-    // (below 0x0600) or in the main Arabic block, so two compares settle
-    // it before the range loop is ever entered.
-    if (c < 0x0600) return false;
-    if (c <= 0x06FF) return true;
-    for (let i = 1; i < P_RANGES.length; i++) {
-      if (c >= P_RANGES[i][0] && c <= P_RANGES[i][1]) return true;
-    }
-    return false;
-  }
-
-  function hasAnyPersian(text) {
-    if (!text) return false;
-    for (let i = 0; i < text.length; i++) {
-      if (isPersianCode(text.charCodeAt(i))) return true;
-    }
-    return false;
-  }
-
-  // One pass over the text collecting every signal we need:
-  //   pChars / lChars — strong character counts
-  //   pWords / lWords — word counts (one long identifier counts once)
-  //   first           — 1 if the first strong char is Persian, 2 if Latin
-  //   woven           — true when Persian appears BETWEEN two Latin runs
-  function scanText(text) {
-    let pChars = 0, lChars = 0, pWords = 0, lWords = 0, first = 0;
-    let wordP = false, wordL = false, inWord = false;
-    let sawL = false, pAfterL = false, woven = false;
-    const len = text ? text.length : 0;
-    for (let i = 0; i <= len; i++) {
-      const c = i < len ? text.charCodeAt(i) : 32;
-      const isSpace = c === 32 || c === 9 || c === 10 || c === 13 ||
-        c === 0x00A0 || c === 0x2028 || c === 0x2029;
-      if (isSpace) {
-        if (inWord) {
-          if (wordP) pWords++;
-          else if (wordL) lWords++;
-        }
-        inWord = false; wordP = false; wordL = false;
-        continue;
-      }
-      inWord = true;
-      if (isPersianCode(c)) {
-        pChars++; wordP = true;
-        if (first === 0) first = 1;
-        if (sawL) pAfterL = true;
-      } else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) {
-        lChars++; wordL = true;
-        if (first === 0) first = 2;
-        if (pAfterL) woven = true;
-        sawL = true;
-      }
-    }
-    return { pChars: pChars, lChars: lChars, pWords: pWords, lWords: lWords,
-             first: first, woven: woven };
-  }
-
-  /*
-   * The direction decision: synchronous, deterministic, four rules.
-   *
-   * The question is never "which language has more of this paragraph". It
-   * is "which language is the paragraph WRITTEN IN" — the matrix language.
-   * Persian technical writing is Persian prose with English terms dropped
-   * into it, and an English term is one token no matter how long it is.
-   * Any rule that weighs characters treats `isAnnotationPresent()` as
-   * nineteen votes for English and «متد» as three for Persian, which is
-   * why that line came out backwards while «متد getClass()» came out
-   * right. Same sentence, different answer, purely because of identifier
-   * length. That is the fragility, not the threshold.
-   *
-   * Two changes remove it:
-   *
-   *   a) Inline code and URLs are excluded before counting (see proseOf).
-   *      In these answers most of the English lives inside backticks, so
-   *      after this the prose is usually unambiguous on its own.
-   *
-   *   b) What is left is judged by rules that are scale-free — they do not
-   *      care how long a word is:
-   *
-   *        1. no Persian in the prose      -> leave the element alone
-   *        2. no Latin in the prose        -> RTL
-   *        3. the prose STARTS in Persian  -> RTL
-   *           (this is exactly the first-strong rule behind HTML's
-   *            dir="auto"; a sentence opens in its own language)
-   *        4. Persian words >= Latin words -> RTL
-   *           (words, not characters, so one long identifier counts once)
-   *        5. Persian sits BETWEEN two Latin runs -> RTL
-   *        6. otherwise                    -> LTR
-   *
-   * Rule 5 is the answer to "Compile Time و Runtime". A Persian word
-   * wedged between two Latin ones is not an object the sentence is
-   * talking about, it is the joint the sentence is built on — «و» there
-   * is doing the same structural work "and" does in English. A language
-   * only supplies connectives to a sentence it owns, so wherever Persian
-   * is woven through the Latin rather than sitting at one end of it, the
-   * sentence is Persian. No word list is needed to see this: it is
-   * position, not vocabulary. Both orders read correctly (bidi keeps each
-   * Latin run internally left-to-right either way), but only RTL puts the
-   * line where a Persian reader's eye starts and aligns it with every
-   * other line in the answer.
-   *
-   * That leaves rule 6 for prose that opens in Latin, is mostly Latin
-   * words, AND keeps its Persian at the tail — «The Persian word for
-   * runtime is زمان اجرا», where the Persian really is the object being
-   * quoted. That is the only shape that still reads left to right.
-   *
-   * There is no confidence score and no async second opinion, so the same
-   * paragraph always gets the same answer, on every page and every load.
-   */
-  function decideSync(s) {
-    if (s.pChars === 0) return null;
-    if (s.lChars === 0) return "rtl";
-    if (s.first === 1) return "rtl";
-    if (s.pWords >= s.lWords) return "rtl";
-    if (s.woven) return "rtl";
-    return "ltr";
-  }
-
   // Text that does NOT count toward the language decision. An identifier
   // inside `backticks` is a foreign object embedded in the sentence, not
   // the language the sentence is written in — the same way a phone number
@@ -429,18 +383,16 @@
   function sampleText(el) {
     const tag = el.tagName;
     if (tag === "UL" || tag === "OL") {
-      const first = el.firstElementChild;
+      // The first ITEM, not the first child: a list can open with a header
+      // or a wrapper, and taking that instead sent the whole list's text
+      // through as the sample — which is how a sidebar of fifty
+      // conversation titles arrived as one paragraph.
+      let first = null;
+      try { first = el.querySelector(":scope > li"); } catch (_) {}
+      if (!first) first = el.firstElementChild;
       if (first) return first.textContent || "";
     }
     return el.textContent || "";
-  }
-
-  // Strict word-count rule for code blocks: Persian words must strictly
-  // outnumber Latin ones before a code block flips.
-  function codeDirection(text) {
-    const s = scanText(text);
-    if (s.pChars === 0) return null;
-    return s.pWords > s.lWords ? "rtl" : "ltr";
   }
 
   // ------------------------- signatures -------------------------
@@ -488,8 +440,16 @@
     return overrides.get(hashText(text)) || null;
   }
 
+  // A Map keeps insertion order, so dropping the oldest key is enough to
+  // keep a long session from growing one entry per manual flip forever.
+  const MAX_OVERRIDES = 500;
+
   function setOverride(text, dir) {
-    overrides.set(hashText(text), dir);
+    const key = hashText(text);
+    if (!overrides.has(key) && overrides.size >= MAX_OVERRIDES) {
+      overrides.delete(overrides.keys().next().value);
+    }
+    overrides.set(key, dir);
   }
 
   // ------------------------- streaming probe -------------------------
@@ -573,6 +533,10 @@
     return v;
   }
 
+  // The rule number behind the most recent decision. Diagnostics reads it;
+  // nothing else depends on it.
+  let lastRule = 0;
+
   // ------------------------- applying -------------------------
 
   function applyMarkTo(el, target) {
@@ -591,7 +555,66 @@
     if (el.style.getPropertyValue("direction") !== target ||
         el.style.getPropertyPriority("direction") !== "important") {
       el.style.setProperty("direction", target, "important");
-      el.style.setProperty("text-align", target === "rtl" ? "right" : "left", "important");
+      if (el.tagName !== "TABLE") {
+        el.style.setProperty("text-align", target === "rtl" ? "right" : "left", "important");
+      }
+    }
+  }
+
+  /*
+   * The prompt box.
+   *
+   * Content inside an editable area is never touched — wrapping the user's
+   * own text would corrupt what they are about to send. Direction is a
+   * different matter: typing Persian into a left-to-right box puts the
+   * final «؟» or «.» on the wrong side of the line, which is the most
+   * frequent annoyance these sites have for a Persian writer.
+   *
+   * dir="auto" on each paragraph is the whole fix. The browser then applies
+   * the first-strong rule per paragraph, live, with no listener and no
+   * work per keystroke. Setting it on the editable ROOT instead does not
+   * work: the root resolves once for all of its content, so one Persian
+   * line drags every English line in the box around with it.
+   *
+   * Every attribute we add is tagged so it can be taken back off cleanly.
+   */
+  function setAutoDir(el) {
+    if (!el || el.getAttribute("dir") === "auto") return;
+    if (el.hasAttribute("dir")) return;          // the site set its own
+    try {
+      el.setAttribute("dir", "auto");
+      el.setAttribute(DIR_ATTR, "1");
+    } catch (_) {}
+  }
+
+  function applyInputDir(el) {
+    if (mode === "auto") return;
+    if (EDIT_BLOCKS.has(el.tagName)) setAutoDir(el);
+  }
+
+  function sweepEditables() {
+    if (mode === "auto") return;
+    let boxes;
+    try { boxes = document.querySelectorAll(INPUT_SKIP); } catch (_) { return; }
+    for (let i = 0; i < boxes.length; i++) {
+      const box = boxes[i];
+      if (box.tagName === "TEXTAREA") continue;  // the stylesheet covers those
+      let blocks = null;
+      try { blocks = box.querySelectorAll(EDIT_BLOCK_SEL); } catch (_) {}
+      if (blocks && blocks.length) {
+        for (let j = 0; j < blocks.length; j++) setAutoDir(blocks[j]);
+      } else {
+        setAutoDir(box);                         // plain text, no blocks
+      }
+    }
+  }
+
+  function clearInputDirs() {
+    let list;
+    try { list = document.querySelectorAll("[" + DIR_ATTR + "]"); } catch (_) { return; }
+    for (let i = 0; i < list.length; i++) {
+      list[i].removeAttribute("dir");
+      list[i].removeAttribute(DIR_ATTR);
     }
   }
 
@@ -607,10 +630,20 @@
     if (ov) { applyMarkTo(el, ov); return ov; }
 
     let dir;
-    if (mode === "auto") dir = null;
-    else if (isCodey(el)) dir = codeDirection(text);
-    else if (mode === "always") dir = hasAnyPersian(text) ? "rtl" : null;
-    else dir = decideSync(scanText(proseOf(el, text)));
+    if (mode === "auto") {
+      dir = null;
+    } else if (isCodey(el)) {
+      dir = FarsiEngine.codeDirection(text);
+    } else if (mode === "always") {
+      dir = FarsiEngine.hasAnyPersian(text) ? "rtl" : null;
+    } else {
+      const verdict = FarsiEngine.directionOf(proseOf(el, text));
+      dir = verdict.dir;
+      lastRule = verdict.rule;
+      if (debug) {
+        try { el.setAttribute(RULE_ATTR, String(verdict.rule)); } catch (_) {}
+      }
+    }
 
     applyMarkTo(el, dir);
     return dir;
@@ -673,8 +706,10 @@
   function wrapLatinInBdi(root) {
     // Never restructure code. Highlighters own that DOM.
     if (isCodey(root) || (root.closest && root.closest(WRAP_SKIP))) return;
-    // A list holds no prose of its own; its items are visited separately.
-    if (root.tagName === "UL" || root.tagName === "OL") return;
+    // A list or table holds no prose of its own; its items and cells are
+    // visited separately.
+    const rt = root.tagName;
+    if (rt === "UL" || rt === "OL" || rt === "TABLE") return;
 
     let walker;
     try {
@@ -747,8 +782,14 @@
     }
   }
 
+  // Deferred elements are only released when a stream ends. If that signal
+  // ever sticks, this Set would grow without bound and hold detached
+  // elements alive, so it gets a ceiling — anything past it is picked up by
+  // the next sweep instead.
+  const MAX_REVISIT = 4000;
+
   function scheduleRevisit(el) {
-    revisit.add(el);
+    if (revisit.size < MAX_REVISIT) revisit.add(el);
     armRevisit();
   }
 
@@ -765,7 +806,13 @@
     if (st.skip === -1) {
       st.skip = (el.closest && el.closest(INPUT_SKIP)) ? 1 : 0;
     }
-    if (st.skip === 1) { st.done = 1; return; }
+    if (st.skip === 1) {
+      // Inside the prompt box: never touch the content, only the
+      // direction of this one paragraph.
+      applyInputDir(el);
+      st.done = 1;
+      return;
+    }
 
     // A <code> inside a <pre> must follow the <pre>'s direction, never
     // carry one of its own, or flipping a code block leaves its contents
@@ -822,12 +869,15 @@
   }
 
   function processNode(root, t) {
-    if (!root || root.nodeType !== 1 || !root.isConnected) return;
-    if (flat.has(root)) {
-      flat.delete(root);
-      markOne(root, t);
-      return;
-    }
+    if (!root || root.nodeType !== 1) return;
+    // Release the flat-queue reference BEFORE the isConnected check. A node
+    // that was detached between being queued and being drained used to
+    // return early and stay in the Set forever, and because the Set holds a
+    // strong reference that pinned the whole detached subtree — so every
+    // conversation switch stranded its paragraphs for the life of the tab.
+    const wasFlat = flat.delete(root);
+    if (!root.isConnected) return;
+    if (wasFlat) { markOne(root, t); return; }
     if (root.matches && root.matches(SEL)) markOne(root, t);
     const list = root.querySelectorAll ? root.querySelectorAll(SEL) : null;
     if (!list || !list.length) return;
@@ -1002,16 +1052,21 @@
   let sweptEpoch = -1;
 
   function rescan() {
-    if (!document.body) return;
+    if (!running || !document.body) return;
     if (domVersion === sweptVersion && epoch === sweptEpoch) return;
     sweptVersion = domVersion;
     sweptEpoch = epoch;
+    hostMemoEl = null;      // never hold a detached element across a sweep
+    hostMemoRes = null;
+    sweepEditables();
     enqueue(document.body);
   }
 
   // Safety net for slow / late-hydrating app shells: a handful of sweeps
   // over the first few seconds, so a paragraph that existed before the
   // observer was wired up is never missed.
+  let primed = false;
+
   function primeSweeps() {
     const delays = [0, 400, 1500, 4000, 9000];
     for (let i = 0; i < delays.length; i++) setTimeout(rescan, delays[i]);
@@ -1019,17 +1074,265 @@
 
   function applyMode(m) {
     mode = m || "smart";
+    if (!running) return;
     epoch++;                       // invalidates every cached decision
     ensureStyle();
     document.documentElement.classList.add(CLASS_RTL);
+    document.documentElement.classList.toggle(CLASS_INPUT, mode !== "auto");
+    if (mode === "auto") clearInputDirs();
+    else sweepEditables();
     if (document.body) { startObserver(); rescan(); }
     else waitForBody(function () { startObserver(); primeSweeps(); });
-    primeSweeps();
+    // The startup sweeps exist to catch content that was on the page before
+    // the observer was wired up. A later mode switch has an observer
+    // already running, so one rescan is all it needs.
+    if (!primed) { primed = true; primeSweeps(); }
   }
 
   function applyFont(on) {
+    fontOn = !!on;
+    if (!running) return;
     ensureStyle();
-    document.documentElement.classList.toggle(CLASS_FONT, !!on);
+    document.documentElement.classList.toggle(CLASS_FONT, fontOn);
+  }
+
+  // ------------------------- diagnostics -------------------------
+  //
+  // Off by default and gated everywhere, so it costs one boolean check when
+  // it is not in use. Its real job is not the outlines — it is the export:
+  // a corpus harvested from a conversation you actually had beats any set
+  // of examples written from imagination, and it is the only way to tell
+  // whether a change to the rules made things better or merely different.
+
+  const RULE_FA = {
+    1: "بدون فارسی — دست‌نخورده",
+    2: "بدون لاتین",
+    3: "شروع با فارسی",
+    4: "کلمات فارسی بیشتر",
+    5: "فارسی بین لاتین",
+    6: "لاتین‌محور — چپ‌چین"
+  };
+
+  let debug = false;
+  let fontOn = false;
+  let lhOn = false;
+  let running = false;      // is the extension actually doing anything here
+  let panel = null;
+  let panelTimer = 0;
+
+  function collectDecisions() {
+    const out = [];
+    const seen = new Set();
+    let list;
+    try { list = document.querySelectorAll("[" + RULE_ATTR + "]"); } catch (_) { return out; }
+    for (let i = 0; i < list.length; i++) {
+      const el = list[i];
+      // Page furniture is decided and marked like anything else, but it is
+      // not conversation text, so it does not belong in a corpus of
+      // conversation text.
+      if (el.closest && el.closest("nav, aside, header, footer")) continue;
+      // A table's own text is its cells run together with no spaces; the
+      // cells are exported individually and are the useful rows.
+      if (el.tagName === "TABLE") continue;
+      // sampleText, not textContent: a list is decided on its first item,
+      // so exporting the whole list's text produced rows whose recorded
+      // rule did not match the text beside it — the export was lying
+      // about what the engine had actually been given.
+      const prose = proseOf(el, sampleText(el)).replace(/\s+/g, " ").trim();
+      if (prose.length < 2) continue;
+      // Nested blocks export the same sentence more than once; the corpus
+      // should weigh a case once, not once per wrapper around it.
+      if (seen.has(prose)) continue;
+      seen.add(prose);
+      out.push({
+        prose: prose,
+        expect: el.getAttribute(MARK),          // what the engine chose
+        note: "harvested, rule " + el.getAttribute(RULE_ATTR)
+      });
+    }
+    return out;
+  }
+
+  function copyCorpus() {
+    const rows = collectDecisions();
+    const json = JSON.stringify(rows, null, 1);
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = json;
+      ta.style.cssText = "position:fixed;opacity:0;pointer-events:none;";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      return rows.length;
+    } catch (_) { return -1; }
+  }
+
+  // The panel is built once and only its counts are rewritten. Rebuilding
+  // the whole thing on every tick replaced the button element too, which
+  // wiped the "copied" feedback a moment after it appeared.
+  let panelHead = null, panelRows = null, panelBtn = null, panelSig = "";
+
+  function buildPanel() {
+    panel = document.createElement("div");
+    panel.id = PANEL_ID;
+    panelHead = document.createElement("b");
+    panelRows = document.createElement("div");
+    panelBtn = document.createElement("button");
+    panelBtn.type = "button";
+    panelBtn.textContent = "کپی JSON";
+    panel.appendChild(panelHead);
+    panel.appendChild(panelRows);
+    panel.appendChild(panelBtn);
+    panelBtn.addEventListener("click", function () {
+      const n = copyCorpus();
+      panelBtn.textContent = n < 0 ? "کپی نشد" : ("کپی شد: " + n + " پاراگراف");
+      setTimeout(function () {
+        if (panelBtn) panelBtn.textContent = "کپی JSON";
+      }, 2000);
+    }, true);
+    document.body.appendChild(panel);
+  }
+
+  function renderPanel() {
+    if (!debug) return;
+    if (!panel || !panel.isConnected) {
+      if (!document.body) return;
+      buildPanel();
+    }
+    const counts = {};
+    let list;
+    try { list = document.querySelectorAll("[" + RULE_ATTR + "]"); } catch (_) { return; }
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i].getAttribute(RULE_ATTR);
+      counts[r] = (counts[r] || 0) + 1;
+    }
+    const keys = Object.keys(counts).sort();
+    const sig = list.length + "|" + keys.map(function (k) { return k + ":" + counts[k]; }).join(",");
+    if (sig === panelSig) return;             // nothing moved; leave the DOM alone
+    panelSig = sig;
+    panelHead.textContent = "حالت تشخیص — " + list.length + " پاراگراف";
+    panelRows.textContent = "";
+    for (let i = 0; i < keys.length; i++) {
+      const row = document.createElement("i");
+      const name = document.createElement("u");
+      name.textContent = RULE_FA[keys[i]] || FarsiEngine.RULE_NAMES[keys[i]] || "";
+      const num = document.createElement("span");
+      num.textContent = keys[i] + " · " + counts[keys[i]];
+      row.appendChild(name);
+      row.appendChild(num);
+      panelRows.appendChild(row);
+    }
+  }
+
+  function applyDebug(on) {
+    const want = !!on;
+    if (want && !running) return;   // nothing to diagnose while switched off
+    if (want === debug) return;
+    debug = want;
+    ensureStyle();
+    document.documentElement.classList.toggle(CLASS_DEBUG, debug);
+    if (debug) {
+      epoch++;                       // force every element to be re-decided
+      rescan();
+      if (!panelTimer) panelTimer = setInterval(renderPanel, 900);
+      renderPanel();
+    } else {
+      if (panelTimer) { clearInterval(panelTimer); panelTimer = 0; }
+      if (panel && panel.isConnected) panel.remove();
+      panel = null; panelHead = null; panelRows = null; panelBtn = null;
+      panelSig = "";
+      let list;
+      try { list = document.querySelectorAll("[" + RULE_ATTR + "]"); } catch (_) { list = []; }
+      for (let i = 0; i < list.length; i++) list[i].removeAttribute(RULE_ATTR);
+    }
+  }
+
+  // ------------------------- on / off -------------------------
+  //
+  // Turning this off has to mean OFF, not "mode = never". Leaving the
+  // <bdi> wrappers behind would not be off at all: a bare <bdi> carries
+  // unicode-bidi:isolate in the browser's own stylesheet, so the page
+  // would still render differently from a page that never had the
+  // extension on it. So everything we added comes back out — marks,
+  // inline styles, dir attributes, the wrappers, the stylesheet, the
+  // observer — and the page is left as we found it.
+
+  function hostKey() {
+    try { return location.hostname.replace(/^www\./, ""); } catch (_) { return ""; }
+  }
+
+  function unwrapAll() {
+    let list;
+    try { list = document.querySelectorAll("bdi[" + ISO_ATTR + "]"); } catch (_) { return; }
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      const par = b.parentNode;
+      if (!par) continue;
+      try {
+        par.replaceChild(document.createTextNode(b.textContent || ""), b);
+        par.normalize();          // re-join the text we split apart
+      } catch (_) {}
+    }
+  }
+
+  function teardown() {
+    if (!running) return;
+    running = false;
+
+    if (observer) { try { observer.disconnect(); } catch (_) {} observer = null; }
+    observing = false;
+    queue.length = 0;
+    queued.clear();
+    flat.clear();
+    revisit.clear();
+    if (revisitTimer) { clearTimeout(revisitTimer); revisitTimer = 0; }
+    scheduled = false;
+    hostMemoEl = null;
+    hostMemoRes = null;
+
+    applyDebug(false);
+    clearInputDirs();
+    hideFlipBtn();
+    if (flipBtn && flipBtn.isConnected) flipBtn.remove();
+    flipBtn = null;
+
+    let list;
+    try { list = document.querySelectorAll("[" + MARK + "]"); } catch (_) { list = []; }
+    for (let i = 0; i < list.length; i++) {
+      const el = list[i];
+      el.removeAttribute(MARK);
+      el.style.removeProperty("direction");
+      el.style.removeProperty("text-align");
+    }
+    unwrapAll();
+
+    const c = document.documentElement.classList;
+    c.remove(CLASS_RTL); c.remove(CLASS_FONT);
+    c.remove(CLASS_INPUT); c.remove(CLASS_LH); c.remove(CLASS_DEBUG);
+    if (styleEl && styleEl.isConnected) styleEl.remove();
+    styleEl = null;
+  }
+
+  function startup() {
+    if (running) return;
+    running = true;
+    applyMode(mode);
+    applyFont(fontOn);
+    applyLineHeight(lhOn);
+  }
+
+  function applySite(offMap) {
+    const off = !!(offMap && offMap[hostKey()] === true);
+    if (off) teardown();
+    else startup();
+  }
+
+  function applyLineHeight(on) {
+    lhOn = !!on;
+    if (!running) return;
+    ensureStyle();
+    document.documentElement.classList.toggle(CLASS_LH, lhOn);
   }
 
   // ------- Selection-based flip button (per-paragraph manual override) -------
@@ -1047,10 +1350,10 @@
     flipBtn.setAttribute("aria-label", "تغییر جهت پاراگراف");
     flipBtn.innerHTML =
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" ' +
-      'fill="none" stroke="currentColor" stroke-width="2.5" ' +
+      'fill="none" stroke="currentColor" stroke-width="2.2" ' +
       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/>' +
-      '<path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>';
+      '<path d="M20 7H8"/><path d="m12 3-4 4 4 4"/>' +
+      '<path d="M4 17h12"/><path d="m12 13 4 4-4 4"/></svg>';
     // Grab the target at mousedown, BEFORE any selectionchange from the
     // click can null out btnTarget by hiding the button.
     flipBtn.addEventListener("mousedown", function (e) {
@@ -1126,6 +1429,7 @@
   }
 
   function handleSelection() {
+    if (!running) return;
     const sel = document.getSelection && document.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { hideFlipBtn(); return; }
     const range = sel.getRangeAt(0);
@@ -1158,6 +1462,7 @@
   const ISO_STRIP_RE = /[⁦-⁩]/g;
 
   function onCopy(e) {
+    if (!running) return;
     try {
       const sel = document.getSelection && document.getSelection();
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
@@ -1198,6 +1503,7 @@
   let lastHref = location.href;
   let wasStreaming = false;
   setInterval(function () {
+    if (!running || document.hidden) return;
     if (location.href !== lastHref) {
       lastHref = location.href;
       rescan();
@@ -1210,28 +1516,42 @@
   }, 500);
 
   chrome.storage.sync.get(
-    { [KEY_MODE]: null, [KEY_FONT]: false, [KEY_OLD_RTL]: true },
+    { [KEY_MODE]: null, [KEY_FONT]: false, [KEY_DEBUG]: false,
+      [KEY_LH]: false, [KEY_SITES]: {}, [KEY_OLD_RTL]: true },
     function (res) {
       let m = res && res[KEY_MODE];
       if (!m) {
         m = (res && res[KEY_OLD_RTL] === false) ? "auto" : "smart";
         try { chrome.storage.sync.set({ [KEY_MODE]: m }); } catch (_) {}
       }
-      applyMode(m);
-      applyFont(res && res[KEY_FONT] === true);
+      mode = m;
+      fontOn = !!(res && res[KEY_FONT] === true);
+      lhOn = !!(res && res[KEY_LH] === true);
+      const wantDebug = !!(res && res[KEY_DEBUG] === true);
+      applySite(res && res[KEY_SITES]);
+      if (wantDebug && running) applyDebug(true);
     }
   );
 
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area !== "sync") return;
-    if (changes[KEY_MODE]) applyMode(changes[KEY_MODE].newValue || "smart");
+    if (changes[KEY_SITES]) applySite(changes[KEY_SITES].newValue);
+    if (changes[KEY_MODE]) {
+      mode = changes[KEY_MODE].newValue || "smart";
+      if (running) applyMode(mode);
+    }
     if (changes[KEY_FONT]) applyFont(changes[KEY_FONT].newValue === true);
+    if (changes[KEY_LH]) applyLineHeight(changes[KEY_LH].newValue === true);
+    if (changes[KEY_DEBUG]) applyDebug(changes[KEY_DEBUG].newValue === true);
   });
 
   chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
     if (!msg || msg.type !== "farsi-toggle") return;
-    if ("mode" in msg) applyMode(msg.mode);
+    if ("siteOn" in msg) { if (msg.siteOn) startup(); else teardown(); }
+    if ("mode" in msg) { mode = msg.mode; if (running) applyMode(mode); }
     if ("font" in msg) applyFont(msg.font);
+    if ("lineSpacing" in msg) applyLineHeight(msg.lineSpacing);
+    if ("debug" in msg) applyDebug(msg.debug);
     if (sendResponse) sendResponse({ ok: true });
   });
 })();

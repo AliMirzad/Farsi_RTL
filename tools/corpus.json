@@ -1,0 +1,412 @@
+[
+ {
+  "prose": "سلام دنیا",
+  "expect": "rtl",
+  "note": "pure Persian"
+ },
+ {
+  "prose": "این یک جمله‌ی کاملاً فارسی است.",
+  "expect": "rtl",
+  "note": "pure Persian sentence"
+ },
+ {
+  "prose": "مقدار پیش‌فرض همان است که گفتیم.",
+  "expect": "rtl",
+  "note": "pure Persian"
+ },
+ {
+  "prose": "The quick brown fox jumps over the lazy dog",
+  "expect": null,
+  "note": "pure English"
+ },
+ {
+  "prose": "public static void main String args",
+  "expect": null,
+  "note": "code-like, no Persian"
+ },
+ {
+  "prose": "Use the getClass method carefully",
+  "expect": null,
+  "note": "pure English"
+ },
+ {
+  "prose": "",
+  "expect": null,
+  "note": "empty"
+ },
+ {
+  "prose": "   ",
+  "expect": null,
+  "note": "whitespace only"
+ },
+ {
+  "prose": "12345 67890",
+  "expect": null,
+  "note": "digits only"
+ },
+ {
+  "prose": "متد   را صدا بزن",
+  "expect": "rtl",
+  "note": "the reported case, code stripped"
+ },
+ {
+  "prose": "متد isAnnotationPresent() بدون بک‌تیک",
+  "expect": "rtl",
+  "note": "same shape, bare identifier"
+ },
+ {
+  "prose": "رفتار Compile Time و Runtime",
+  "expect": "rtl",
+  "note": "heading that used to come out backwards"
+ },
+ {
+  "prose": "این   را به   تبدیل کن",
+  "expect": "rtl",
+  "note": "two long generics stripped"
+ },
+ {
+  "prose": "یعنی برای  ، نوع  ، آرایه و   نیز می‌توانیم",
+  "expect": "rtl",
+  "note": "enumeration"
+ },
+ {
+  "prose": "ما Spring Boot، Hibernate و Maven استفاده می‌کنیم",
+  "expect": "rtl",
+  "note": "Persian-led with a Latin list"
+ },
+ {
+  "prose": "کلاس Meta.class را با Class clazz مقایسه کن",
+  "expect": "rtl",
+  "note": "Persian-led, identifier heavy"
+ },
+ {
+  "prose": "اگر active != null باشد، ادامه بده",
+  "expect": "rtl",
+  "note": "Persian-led with an expression"
+ },
+ {
+  "prose": "Runtime چیست؟",
+  "expect": "rtl",
+  "note": "Latin-led, Persian sentence"
+ },
+ {
+  "prose": "  : زمان اجرای برنامه",
+  "expect": "rtl",
+  "note": "code-led definition"
+ },
+ {
+  "prose": "Annotation در Runtime قابل خواندن است",
+  "expect": "rtl",
+  "note": "Latin-led, Persian majority"
+ },
+ {
+  "prose": "Reflection یعنی برنامه بتواند ساختار خودش را بررسی کند",
+  "expect": "rtl",
+  "note": "Latin-led explanation"
+ },
+ {
+  "prose": "Class Literal یعنی عبارت",
+  "expect": "rtl",
+  "note": "bold Latin then Persian"
+ },
+ {
+  "prose": "JVM آن را در زمان اجرا می‌سازد",
+  "expect": "rtl",
+  "note": "acronym-led"
+ },
+ {
+  "prose": "Compile Time و Runtime",
+  "expect": "rtl",
+  "note": "Persian conjunction between Latin runs"
+ },
+ {
+  "prose": "Spring Boot, Hibernate, Maven, Gradle و Docker",
+  "expect": "rtl",
+  "note": "library list joined in Persian"
+ },
+ {
+  "prose": "Compile Time، Runtime و Load Time",
+  "expect": "rtl",
+  "note": "woven with a Persian comma"
+ },
+ {
+  "prose": "Runtime، Compile Time",
+  "expect": "rtl",
+  "note": "two terms, Persian comma"
+ },
+ {
+  "prose": "Reflection، Annotation، Proxy، Bytecode",
+  "expect": "rtl",
+  "note": "Persian-punctuated Latin list"
+ },
+ {
+  "prose": "API، Service، Repository",
+  "expect": "rtl",
+  "note": "short Persian-punctuated list"
+ },
+ {
+  "prose": "The Persian word for runtime is زمان اجرا",
+  "expect": "ltr",
+  "note": "Persian quoted at the tail"
+ },
+ {
+  "prose": "The term is borrowed from the Persian کتاب",
+  "expect": "ltr",
+  "note": "English sentence, Persian object"
+ },
+ {
+  "prose": "Note that the file name must end with فارسی",
+  "expect": "ltr",
+  "note": "English instruction, Persian tail"
+ },
+ {
+  "prose": "۱.   باید   باشد",
+  "expect": "rtl",
+  "note": "numbered list item, Persian digits"
+ },
+ {
+  "prose": "مستندات در   موجود است",
+  "expect": "rtl",
+  "note": "URL stripped out"
+ },
+ {
+  "prose": "متد getClass() در کلاس Object تعریف شده است",
+  "expect": "rtl",
+  "note": "Persian-led, two identifiers"
+ },
+ {
+  "prose": "از آرایه arr[i] استفاده کن و مقدار {x} را بردار",
+  "expect": "rtl",
+  "note": "Persian-led with brackets"
+ },
+ {
+  "prose": "مسیر چپ ← راست را ببین",
+  "expect": "rtl",
+  "note": "arrow in Persian prose"
+ },
+ {
+  "prose": "هر سه جواب درست‌اند:   یا   داخل فایل   ذخیره می‌شود.",
+  "expect": "rtl",
+  "note": "heavily code-laden Persian"
+ },
+ {
+  "prose": "Liara AI قابلیت‌ها",
+  "expect": "rtl",
+  "note": "harvested — Persian heading led by a product name"
+ },
+ {
+  "prose": "Edge Case مثل",
+  "expect": "rtl",
+  "note": "harvested — Persian heading, two Latin words"
+ },
+ {
+  "prose": "native method چیست",
+  "expect": "rtl",
+  "note": "harvested — same shape as «JNI چیست», was backwards"
+ },
+ {
+  "prose": "Suppressed Exception و",
+  "expect": "rtl",
+  "note": "harvested — trailing Persian conjunction"
+ },
+ {
+  "prose": "Java Core عمیق",
+  "expect": "rtl",
+  "note": "harvested — Persian adjective on a Latin term"
+ },
+ {
+  "prose": "JNI چیست",
+  "expect": "rtl",
+  "note": "harvested — the one-Latin-word twin that already worked"
+ },
+ {
+  "prose": "Memory Model به زبان ساده",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "Docs + پروژه",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "Core قوی",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "Headingها، Bulletها و Calloutها با الگوی Chapter 12 هماهنگ شدند.",
+  "expect": "rtl",
+  "note": "harvested — Persian suffixes on Latin terms"
+ },
+ {
+  "prose": "Code Blockهای LTR",
+  "expect": "rtl",
+  "note": "harvested — Persian suffix, woven"
+ },
+ {
+  "prose": "Application + PostgreSQL + Redis را containerize می‌کنیم.",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "ادامه یادگیری Java Core",
+  "expect": "rtl",
+  "note": "harvested — conversation title"
+ },
+ {
+  "prose": "Enum Tutorial Overview Work",
+  "expect": null,
+  "note": "harvested — all-Latin title, left alone"
+ },
+ {
+  "prose": "3D Cartoon Portrait Prompt",
+  "expect": null,
+  "note": "harvested — all-Latin title"
+ },
+ {
+  "prose": "ارتباط با Inheritance و Polymorphism",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "مشکل visibility بین Threadها",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "روز ۲۱ — Chapter 14 Generics Part 1",
+  "expect": "rtl",
+  "note": "harvested — Persian-led with a long Latin tail"
+ },
+ {
+  "prose": "Scope و implicitly final",
+  "expect": "rtl",
+  "note": "harvested — woven"
+ },
+ {
+  "prose": "تفاوت با synchronized",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "Autoboxing و Auto-unboxing",
+  "expect": "rtl",
+  "note": "harvested — two Latin terms joined in Persian"
+ },
+ {
+  "prose": "Microservices؟",
+  "expect": "rtl",
+  "note": "harvested — single Latin word with a Persian question mark"
+ },
+ {
+  "prose": "Marker Annotation مخصوص متد",
+  "expect": "rtl",
+  "note": "harvested — two and two, ties go RTL"
+ },
+ {
+  "prose": "Day 17: «تکمیل شده»",
+  "expect": "rtl",
+  "note": "harvested — Latin label, Persian value"
+ },
+ {
+  "prose": "constructor injection این شکلیه.",
+  "expect": "rtl",
+  "note": "harvested — Latin-led sentence in Persian"
+ },
+ {
+  "prose": "Autoboxing چیست؟",
+  "expect": "rtl",
+  "note": "harvested — one Latin word, one Persian"
+ },
+ {
+  "prose": "Type Annotation قابل‌استفاده روی نوع بازگشتی و نوع پارامتر",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "README درست، migration، تست، API documentation و deployment هم جزو پروژه‌اند.",
+  "expect": "rtl",
+  "note": "harvested — heavily mixed prose"
+ },
+ {
+  "prose": "Java متوجه می‌شود که یک لازم داریم و تبدیل را خودکار انجام می‌دهد.",
+  "expect": "rtl",
+  "note": "harvested — Latin-led Persian sentence"
+ },
+ {
+  "prose": "Autoboxing فقط بین Primitive و Wrapper متناظر آن انجام می‌شود:",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "یکی از مهم‌ترین کاربردها، Collectionها هستند:",
+  "expect": "rtl",
+  "note": "harvested — Persian suffix on a Latin term"
+ },
+ {
+  "prose": "اما Wrapper یک Reference Type است و می‌تواند باشد:",
+  "expect": "rtl",
+  "note": "harvested"
+ },
+ {
+  "prose": "Jakarta EE 11 الان شامل مجموعه بزرگی از specificationهاست و Web Profile خودش مخصوص web applications تعریف شده.",
+  "expect": "rtl",
+  "note": "harvested — long mixed paragraph"
+ },
+ {
+  "prose": "SOLID را هم کتاب تئوری جداگانه نمی‌گذارم که دو هفته پنج تعریف حفظ کنی.",
+  "expect": "rtl",
+  "note": "harvested — acronym-led"
+ },
+ {
+  "prose": "Spring Boot فعلی 4.1.1 حداقل Java 17 می‌خواهد و روی Spring Framework 7 قرار دارد.",
+  "expect": "rtl",
+  "note": "harvested — version numbers and Latin terms"
+ },
+ {
+  "prose": "Clean Code 2nd Edition → کیفیت و طراحی کد",
+  "expect": "rtl",
+  "note": "harvested — Latin title, Persian gloss"
+ },
+ {
+  "prose": "Naming، Functions، Classes، Error Handling، Tests، Refactoring و...",
+  "expect": "rtl",
+  "note": "harvested — Latin list, Persian punctuation"
+ },
+ {
+  "prose": "چون الان تقریباً روز ۲۰ برنامه‌ای، من یک Review Rotation درست می‌کنم.",
+  "expect": "rtl",
+  "note": "harvested — Persian-led prose"
+ },
+ {
+  "prose": "Book → آموزش باهم → کدنویسی → تمرین نهایی → Note → Review → Project",
+  "expect": "rtl",
+  "note": "harvested — arrow pipeline, mixed"
+ },
+ {
+  "prose": "Primitive Wrapper",
+  "expect": null,
+  "note": "harvested — all-Latin table header inside a Persian table"
+ },
+ {
+  "prose": "Portfolio-grade backend",
+  "expect": null,
+  "note": "harvested — all-Latin table cell"
+ },
+ {
+  "prose": "Head First Design Patterns 2nd Edition → OO Design/Patterns",
+  "expect": null,
+  "note": "harvested — all-Latin line"
+ },
+ {
+  "prose": "Google Drive File search Memory",
+  "expect": null,
+  "note": "harvested — all-Latin UI chrome"
+ },
+ {
+  "prose": "Java Core — Chapter 12: Annotations (Part 2)",
+  "expect": null,
+  "note": "harvested — all-Latin document title"
+ }
+]
