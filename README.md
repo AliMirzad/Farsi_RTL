@@ -98,6 +98,7 @@ tools/        اجراگر دقت و مجموعهٔ تست
 node tools/accuracy.js            # دقت روی مجموعهٔ تست
 node tools/accuracy.js --verbose  # با جزئیات هر مورد
 node tools/match.test.js          # تطبیق الگوی سایت‌ها
+node tools/ui.test.js             # پاپ‌آپ و اندازهٔ متن در Chrome بی‌سر (نیاز به Chrome)
 ```
 
 ### بزرگ‌کردن مجموعهٔ تست

@@ -26,9 +26,10 @@
  *   3. <pre> and <code> subtrees are never restructured at all. Syntax
  *      highlighters own that DOM and rebuild it constantly.
  *
- * Every paragraph respects a session-only user override: select any text
- * inside a paragraph, click the floating ⇄ button, and that paragraph
- * alone flips. A refresh wipes overrides.
+ * Every paragraph respects a user override: select any text inside a
+ * paragraph, click the floating ⇄ button, and that paragraph alone flips.
+ * Overrides are kept in storage.local, so they survive a refresh; the
+ * popup can clear them.
  */
 
 (function () {
@@ -41,6 +42,7 @@
   const KEY_SITES = "siteOff";   // { "claude.ai": true } means OFF there
   const KEY_OVERRIDES = "overrides";   // storage.local: hash -> "rtl" | "ltr"
   const KEY_OLD_RTL = "rtlEnabled";
+  const KEY_SCALE = "fontScale";       // percent: 90 | 100 | 110 | 120 | 130
 
   const CLASS_RTL = "farsi-rtl-on";
   const CLASS_FONT = "farsi-font-on";
@@ -50,6 +52,9 @@
   const CLASS_INPUT = "farsi-input-on";
   const CLASS_DEBUG = "farsi-debug-on";
   const CLASS_LH = "farsi-lh-on";
+  const CLASS_SCALE = "farsi-scale-on";
+  const SCALE_VAR = "--farsi-scale";
+  const SCALES = [90, 100, 110, 120, 130];
   const RULE_ATTR = "data-farsi-rule";
   const PANEL_ID = "farsi-debug-panel";
   const DIR_ATTR = "data-farsi-dir";   // marks a dir="auto" WE added
@@ -102,7 +107,8 @@
   // switch invalidates all per-element bookkeeping at once.
   let epoch = 0;
 
-  // Session-only manual overrides, keyed by a hash of the paragraph text.
+  // Manual overrides, keyed by a hash of the paragraph text. Persisted in
+  // storage.local (see saveOverrides).
   const overrides = new Map();
 
   // Per-element bookkeeping. One object per element rather than five
@@ -134,6 +140,12 @@
     const st = stateMap.get(el);
     if (st !== undefined) st.done = 0;
   }
+
+  const SCALE_ROOT =
+    "[" + MARK + "]:not(pre):not(code):not([" + MARK + "] *)" +
+    ":not(nav *):not(aside *):not(header *):not(form *)" +
+    ":not([role=\"navigation\"] *):not([role=\"banner\"] *)" +
+    ":not([role=\"complementary\"] *)";
 
   const FONT_REG  = chrome.runtime.getURL("fonts/Vazirmatn-Regular.woff2");
   const FONT_MED  = chrome.runtime.getURL("fonts/Vazirmatn-Medium.woff2");
@@ -209,6 +221,21 @@
     // makes it harder to read, not easier.
     "html." + CLASS_LH + " [" + MARK + "=\"rtl\"]:not(pre):not(code){" +
     "line-height:1.95!important;}\n" +
+
+    // Text size. Only the OUTERMOST marked paragraph is scaled, so a <p>
+    // inside a marked <li> inside a marked <ul> is not scaled three times.
+    // zoom rather than font-size: font-size:1.1em on an <h2> would resolve
+    // against its parent and shrink the heading to body size, while zoom
+    // scales whatever size the site gave it. The site's own chrome
+    // (sidebar, header, the prompt form) is excluded even where a
+    // paragraph in it was marked, and a code block inside a scaled
+    // paragraph is zoomed back by the inverse, so code keeps its size.
+    // The scale itself is one custom property on <html>: changing it
+    // restyles through the cascade, with nothing written per paragraph.
+    "html." + CLASS_SCALE + " " + SCALE_ROOT + "{" +
+    "zoom:var(" + SCALE_VAR + ")!important;}\n" +
+    "html." + CLASS_SCALE + " " + SCALE_ROOT + " pre{" +
+    "zoom:calc(1 / var(" + SCALE_VAR + "))!important;}\n" +
 
     // Diagnostics. Outlines do not affect layout, so turning this on never
     // moves anything on the page.
@@ -466,6 +493,20 @@
     }
     overrides.set(key, dir);
     saveOverrides();
+  }
+
+  // The popup cleared every override (possibly from another tab). Drop
+  // ours too — otherwise the next flip here would write them all back —
+  // and let every paragraph take its direction from the engine again.
+  // Bumping the epoch is what a mode switch does: each cached decision is
+  // invalidated and the next sweep recomputes it.
+  function clearOverrides() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+    if (!overrides.size) return;
+    overrides.clear();
+    if (!running) return;
+    epoch++;
+    rescan();
   }
 
   function loadOverrides(cb) {
@@ -1147,6 +1188,7 @@
   let debug = false;
   let fontOn = false;
   let lhOn = false;
+  let scale = 100;
   let running = false;      // is the extension actually doing anything here
   let panel = null;
   let panelTimer = 0;
@@ -1341,6 +1383,8 @@
     const c = document.documentElement.classList;
     c.remove(CLASS_RTL); c.remove(CLASS_FONT);
     c.remove(CLASS_INPUT); c.remove(CLASS_LH); c.remove(CLASS_DEBUG);
+    c.remove(CLASS_SCALE);
+    document.documentElement.style.removeProperty(SCALE_VAR);
     if (styleEl && styleEl.isConnected) styleEl.remove();
     styleEl = null;
   }
@@ -1351,6 +1395,7 @@
     applyMode(mode);
     applyFont(fontOn);
     applyLineHeight(lhOn);
+    applyScale(scale);
   }
 
   function applySite(offMap) {
@@ -1364,6 +1409,25 @@
     if (!running) return;
     ensureStyle();
     document.documentElement.classList.toggle(CLASS_LH, lhOn);
+  }
+
+  function normScale(v) {
+    const n = Number(v);
+    return SCALES.indexOf(n) === -1 ? 100 : n;
+  }
+
+  function applyScale(v) {
+    scale = normScale(v);
+    if (!running) return;
+    const root = document.documentElement;
+    if (scale === 100) {
+      root.classList.remove(CLASS_SCALE);
+      root.style.removeProperty(SCALE_VAR);
+      return;
+    }
+    ensureStyle();
+    root.style.setProperty(SCALE_VAR, String(scale / 100));
+    root.classList.add(CLASS_SCALE);
   }
 
   // ------- Selection-based flip button (per-paragraph manual override) -------
@@ -1576,7 +1640,8 @@
   loadOverrides(function () {
   chrome.storage.sync.get(
     { [KEY_MODE]: null, [KEY_FONT]: false, [KEY_DEBUG]: false,
-      [KEY_LH]: false, [KEY_SITES]: {}, [KEY_OLD_RTL]: true },
+      [KEY_LH]: false, [KEY_SITES]: {}, [KEY_OLD_RTL]: true,
+      [KEY_SCALE]: 100 },
     function (res) {
       let m = res && res[KEY_MODE];
       if (!m) {
@@ -1586,6 +1651,7 @@
       mode = m;
       fontOn = !!(res && res[KEY_FONT] === true);
       lhOn = !!(res && res[KEY_LH] === true);
+      scale = normScale(res && res[KEY_SCALE]);
       const wantDebug = !!(res && res[KEY_DEBUG] === true);
       applySite(res && res[KEY_SITES]);
       if (wantDebug && running) applyDebug(true);
@@ -1594,6 +1660,13 @@
   });
 
   chrome.storage.onChanged.addListener(function (changes, area) {
+    if (area === "local") {
+      // Only an emptied set means anything here: this tab's own flips
+      // write non-empty sets, and those are already in its map.
+      const ch = changes[KEY_OVERRIDES];
+      if (ch && (!ch.newValue || !Object.keys(ch.newValue).length)) clearOverrides();
+      return;
+    }
     if (area !== "sync") return;
     if (changes[KEY_SITES]) applySite(changes[KEY_SITES].newValue);
     if (changes[KEY_MODE]) {
@@ -1603,6 +1676,7 @@
     if (changes[KEY_FONT]) applyFont(changes[KEY_FONT].newValue === true);
     if (changes[KEY_LH]) applyLineHeight(changes[KEY_LH].newValue === true);
     if (changes[KEY_DEBUG]) applyDebug(changes[KEY_DEBUG].newValue === true);
+    if (changes[KEY_SCALE]) applyScale(changes[KEY_SCALE].newValue);
   });
 
   chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
@@ -1612,6 +1686,8 @@
     if ("font" in msg) applyFont(msg.font);
     if ("lineSpacing" in msg) applyLineHeight(msg.lineSpacing);
     if ("debug" in msg) applyDebug(msg.debug);
+    if ("fontScale" in msg) applyScale(msg.fontScale);
+    if (msg.clearOverrides) clearOverrides();
     if (msg.flip) flipFromShortcut();
     if (sendResponse) sendResponse({ ok: true });
   });

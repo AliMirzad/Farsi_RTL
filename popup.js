@@ -19,6 +19,10 @@ const KEY_DEBUG = "debugMode";    // boolean — developer diagnostics
 const KEY_LH = "lineSpacing";     // boolean — looser line height
 const KEY_SITES = "siteOff";      // { host: true } means switched off there
 const KEY_OLD_RTL = "rtlEnabled"; // legacy boolean, migrated on load
+const KEY_SCALE = "fontScale";    // percent, one of SCALES
+const KEY_OVERRIDES = "overrides"; // storage.local: manual flips, hash -> dir
+
+const SCALES = [90, 100, 110, 120, 130];
 
 // Version label and its link come from the manifest, so they can never
 // drift out of sync with a release.
@@ -39,6 +43,13 @@ const hostEl = document.getElementById("site-host");
 const noteEl = document.getElementById("site-note");
 
 const rowEl = document.getElementById("site-row");
+const scaleEl = document.getElementById("scale");
+const scaleDownEl = document.getElementById("scale-down");
+const scaleUpEl = document.getElementById("scale-up");
+const scaleValEl = document.getElementById("scale-val");
+const resetEl = document.getElementById("reset");
+const resetTextEl = document.getElementById("reset-text");
+const resetBtnEl = document.getElementById("reset-btn");
 
 // The tab this popup was opened over. Both facts about it matter: which
 // host it is, and whether the extension runs there at all — the second
@@ -62,7 +73,8 @@ let supported = false;
 
 api.storage.sync.get(
   { [KEY_MODE]: null, [KEY_FONT]: false, [KEY_DEBUG]: false,
-    [KEY_LH]: false, [KEY_SITES]: {}, [KEY_OLD_RTL]: true },
+    [KEY_LH]: false, [KEY_SITES]: {}, [KEY_OLD_RTL]: true,
+    [KEY_SCALE]: 100 },
   async (res) => {
     const tab = await currentTab();
     host = tab.host;
@@ -82,6 +94,7 @@ api.storage.sync.get(
     fontEl.checked = res[KEY_FONT] === true;
     debugEl.setAttribute("aria-pressed", res[KEY_DEBUG] === true ? "true" : "false");
     lhEl.checked = res[KEY_LH] === true;
+    showScale(SCALES.includes(res[KEY_SCALE]) ? res[KEY_SCALE] : 100);
   }
 );
 
@@ -145,4 +158,68 @@ siteEl.addEventListener("change", async () => {
   else map[host] = true;
   await pset({ [KEY_SITES]: map });
   pushToActiveTab({ type: "farsi-toggle", siteOn: on });
+});
+
+// ---------- text size ----------
+
+let scale = 100;
+const fa = (n) => n.toLocaleString("fa-IR");
+
+function showScale(v) {
+  scale = v;
+  const i = SCALES.indexOf(v);
+  scaleValEl.textContent = fa(v) + "٪";
+  scaleEl.classList.toggle("changed", v !== 100);
+  // aria-disabled rather than disabled: a disabled button drops keyboard
+  // focus, so pressing + up to the top would throw the user out of the
+  // control.
+  scaleDownEl.setAttribute("aria-disabled", i <= 0 ? "true" : "false");
+  scaleUpEl.setAttribute("aria-disabled", i >= SCALES.length - 1 ? "true" : "false");
+}
+
+async function stepScale(dir) {
+  const i = SCALES.indexOf(scale) + dir;
+  if (i < 0 || i >= SCALES.length) return;
+  showScale(SCALES[i]);
+  await pset({ [KEY_SCALE]: scale });
+  pushToActiveTab({ type: "farsi-toggle", fontScale: scale });
+}
+
+scaleDownEl.addEventListener("click", () => stepScale(-1));
+scaleUpEl.addEventListener("click", () => stepScale(1));
+// Arrow keys anywhere in the control, as on a native number input.
+scaleEl.addEventListener("keydown", (e) => {
+  const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key];
+  if (!d) return;
+  e.preventDefault();
+  stepScale(d);
+});
+
+// ---------- manual overrides ----------
+
+function showOverrideCount(n) {
+  resetEl.classList.remove("done");
+  resetEl.hidden = !n;
+  resetTextEl.textContent = "اصلاح‌های ذخیره‌شده: " + fa(n);
+}
+
+try {
+  api.storage.local.get({ [KEY_OVERRIDES]: {} }, (res) => {
+    showOverrideCount(Object.keys((res && res[KEY_OVERRIDES]) || {}).length);
+  });
+} catch (_) { /* no storage.local: leave the row hidden */ }
+
+resetBtnEl.addEventListener("click", async () => {
+  // Only the overrides key: every other setting lives in storage.sync and
+  // is not touched. Open tabs see the removal through storage.onChanged
+  // and re-evaluate; the message is for the tab in front of the user, so
+  // it does not depend on event timing.
+  await new Promise((r) => api.storage.local.remove(KEY_OVERRIDES, r));
+  pushToActiveTab({ type: "farsi-toggle", clearOverrides: true });
+  resetEl.classList.add("done");
+  resetTextEl.textContent = "اصلاح‌ها پاک شد";
+  // The button that had focus is gone; keep focus inside the callout
+  // rather than dropping it on <body>.
+  resetTextEl.setAttribute("tabindex", "-1");
+  resetTextEl.focus();
 });

@@ -146,6 +146,29 @@
   input:checked + .tr::before { inset-inline-start:18px; background:#fff; }
   input:focus-visible + .tr { outline:2px solid var(--accent); outline-offset:2px; }
 
+  /* Text size: a small stepper in the same track colour as the switches,
+     so it reads as one more control in the card rather than a new widget.
+     Laid out LTR on purpose: minus on the left, plus on the right, the way
+     every size control is drawn. */
+  .step {
+    display:flex; align-items:center; flex-shrink:0; margin-inline-start:auto;
+    direction:ltr; height:23px; padding:0 2px;
+    background:#232830; border:1px solid var(--line-hi); border-radius:99px;
+  }
+  .step button {
+    width:19px; height:19px; padding:0; border:0; border-radius:50%;
+    background:none; color:var(--text); cursor:pointer;
+    display:grid; place-items:center; transition:background .16s, color .16s;
+  }
+  .step button svg { width:10px; height:10px; display:block; }
+  .step button:hover { background:var(--line-hi); }
+  .step button[aria-disabled="true"] { color:var(--faint); background:none; cursor:default; }
+  .step output {
+    min-width:34px; text-align:center;
+    font:500 10.5px/1 'Vazirmatn'; font-variant-numeric:tabular-nums;
+  }
+  .step.changed output { color:var(--accent); }
+
   /* ---------- tip + footer ---------- */
   /* The per-paragraph flip is the one feature nothing on the page
      announces, so the callout shows the actual button rather than
@@ -168,6 +191,23 @@
   .c1 { display:block; font:700 11px/1.45 'Vazirmatn'; color:#dfe3ea; }
   .c2 { display:block; font:400 10px/1.7 'Vazirmatn'; color:#97a0ab; margin-top:3px; }
   .c3 { color:var(--faint); }
+  /* Only shown while there is something to clear, so a new user never
+     sees a control for a feature they have not used yet. */
+  .reset {
+    display:flex; align-items:center; gap:8px; margin-top:7px;
+    font:400 10px/1 'Vazirmatn'; color:var(--faint);
+  }
+  .reset[hidden] { display:none; }
+  .reset button {
+    margin-inline-start:auto; padding:4px 8px;
+    font:500 10px/1 'Vazirmatn'; color:var(--accent);
+    background:none; border:1px solid rgba(16,185,129,.32); border-radius:7px;
+    cursor:pointer; transition:background .16s, border-color .16s;
+  }
+  .reset button:hover { background:rgba(16,185,129,.1); border-color:rgba(16,185,129,.5); }
+  .reset.done button { display:none; }
+  .reset.done .reset-text { color:var(--accent); }
+  .reset-text:focus { outline:none; }
   .foot {
     display:flex; align-items:center; justify-content:space-between;
     font:400 9.5px/1 'Vazirmatn'; color:#4d545f;
@@ -182,6 +222,11 @@
     background:none; border:0; padding:0; cursor:pointer;
   }
   .dbg:hover { color:#8b919e; }
+  .step button:focus-visible, .reset button:focus-visible,
+  .dbg:focus-visible, .ver:focus-visible {
+    outline:2px solid var(--accent); outline-offset:2px;
+  }
+  .dbg:focus-visible, .ver:focus-visible { border-radius:3px; }
   .dbg .led {
     width:6px; height:6px; border-radius:50%;
     background:#3a414d; transition:background .16s, box-shadow .16s;
@@ -213,7 +258,7 @@
       <span class="site-note" id="site-note">در این سایت فعال است</span>
     </span>
     <label class="sw">
-      <input type="checkbox" id="toggle-site" checked>
+      <input type="checkbox" id="toggle-site" checked aria-label="فعال در این سایت">
       <span class="tr"></span>
     </label>
   </div>
@@ -261,7 +306,7 @@
         <span class="t2">جایگزینی فونت متن‌های فارسی</span>
       </span>
       <label class="sw">
-        <input type="checkbox" id="toggle-font">
+        <input type="checkbox" id="toggle-font" aria-label="فونت Vazirmatn">
         <span class="tr"></span>
       </label>
     </div>
@@ -271,9 +316,26 @@
         <span class="t2">فارسی در همین اندازه به فضای بیشتری نیاز دارد</span>
       </span>
       <label class="sw">
-        <input type="checkbox" id="toggle-lh">
+        <input type="checkbox" id="toggle-lh" aria-label="فاصله‌ی سطرها">
         <span class="tr"></span>
       </label>
+    </div>
+    <div class="frow">
+      <span class="txt">
+        <span class="t1" id="scale-label">اندازه‌ی متن</span>
+        <span class="t2">پاراگراف‌های فارسی، نه کد</span>
+      </span>
+      <div class="step" id="scale" role="group" aria-labelledby="scale-label">
+        <button type="button" id="scale-down" aria-label="کوچک‌تر کردن متن">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" aria-hidden="true"><path d="M2.5 6h7"/></svg>
+        </button>
+        <output id="scale-val" aria-live="polite">100%</output>
+        <button type="button" id="scale-up" aria-label="بزرگ‌تر کردن متن">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" aria-hidden="true"><path d="M2.5 6h7M6 2.5v7"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -288,7 +350,11 @@
     <span>
       <span class="c1">چیدمانِ یک پاراگراف درست نیست؟</span>
       <span class="c2">متنش را انتخاب کن تا همین دکمه ظاهر شود؛ زدنش جهتِ همان
-      پاراگراف را برعکس می‌کند <span class="c3">— تا رفرشِ بعدی.</span></span>
+      پاراگراف را برعکس می‌کند <span class="c3">— با رفرش هم می‌ماند.</span></span>
+      <span class="reset" id="reset" hidden>
+        <span class="reset-text" id="reset-text" aria-live="polite"></span>
+        <button type="button" id="reset-btn" aria-label="پاک‌کردن همه‌ی اصلاح‌های دستی">پاک‌کردن</button>
+      </span>
     </span>
   </div>
 
